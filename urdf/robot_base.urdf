@@ -1,0 +1,254 @@
+<?xml version="1.0"?>
+<robot name="puppeteer">
+
+  <!-- CONSTANTS -->
+  <!-- <property name="M_PI" value="3.14159"/> -->
+  <!-- <property name="SCALE" value="0.0254"/> -->
+
+  <!-- Main cube: -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+	<box size="0.095 .097 .075" /> 
+      </geometry>
+      <material name="gray">
+	<color rgba=".788 .80 .80 1 "/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- Left Wheel -->
+  <link name="left_wheel">
+    <visual>
+      <geometry>
+	<cylinder radius=".0381" length=".00635" />
+      </geometry>
+      <material name="silver">
+	<color rgba=".863 .863 .863 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="base_to_left_wheel" type="fixed">
+    <parent link="base_link" />
+    <child link="left_wheel" />
+    <origin xyz="0 .075 -.006" rpy="1.5708 0 0"/>
+  </joint>
+
+
+  <!-- Right Wheel -->
+  <link name="right_wheel">
+    <visual>
+      <geometry>
+	<cylinder radius=".0381" length=".00635" />
+      </geometry>
+      <material name="silver" />
+    </visual>
+  </link>
+
+  <joint name="base_to_right_wheel" type="fixed">
+    <parent link="base_link" />
+    <child link="right_wheel" />
+    <origin xyz="0 -.075 -.006" rpy="-1.5708 0 0"/>
+  </joint>
+
+
+  <!-- Cover -->
+  <link name="cover">
+    <visual>
+      <geometry>
+	<cylinder radius=".105" length=".1397" />
+      </geometry>
+      <material name="trans_black">
+	<color rgba="0.0 0.0 0.0 0.35 "/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="base_to_cover" type="fixed">
+    <parent link="base_link" />
+    <child link="cover" />
+    <origin xyz="0 0 .045" />
+  </joint>  
+
+
+  <!-- Left Winch -->
+  <link name="left_winch">
+    <visual>
+      <geometry>
+  	<box size=".0254 .0065 .051" />
+      </geometry>
+      <material name="gray" />
+    </visual>
+  </link>
+
+  <joint name="base_to_left_winch" type="fixed">
+    <parent link="base_link" />
+    <child link="left_winch" />
+    <origin xyz="0 .04525 .063" />
+  </joint>
+
+  <link name="left_string">
+    <visual>
+      <geometry>
+	<cylinder radius=".0015" length=".0058" />
+      </geometry>
+      <material name="black">
+	<color rgba="0.0 0.0 0.0 1.0 "/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="left_winch_to_string" type="fixed">
+    <parent link="left_winch" />
+    <child link="left_string" />
+    <origin xyz="-.0102 -.00615 .023" rpy="1.5708 0 0"/>
+  </joint>
+
+
+
+
+  <!-- Right Winch -->
+  <link name="right_winch">
+    <visual>
+      <geometry>
+  	<box size=".0254 .0065 .051" />
+      </geometry>
+      <material name="gray" />
+    </visual>
+  </link>
+
+  <joint name="base_to_right_winch" type="fixed">
+    <parent link="base_link" />
+    <child link="right_winch" />
+    <origin xyz="0 -.04525 .063" />
+  </joint>
+
+  <link name="right_string">
+    <visual>
+      <geometry>
+	<cylinder radius=".0015" length=".0058" />
+      </geometry>
+      <material name="black" />
+    </visual>
+  </link>
+
+  <joint name="right_winch_to_string" type="fixed">
+    <parent link="right_winch" />
+    <child link="right_string" />
+    <origin xyz="-.0102 .00615 .023" rpy="-1.5708 0 0"/>
+  </joint>
+
+
+  <!-- Wood Top -->
+  <link name="top">
+    <visual>
+      <geometry>
+	<box size=".10 .097 .005" />
+      </geometry>
+      <material name="wood">
+	<color rgba=".8039 .667 .490 1" />
+      </material>
+    </visual>
+  </link>
+
+  <link name="topend1">
+    <visual>
+      <geometry>
+	<cylinder radius=".0485" length=".005" />
+      </geometry>
+      <material name="wood" />
+    </visual>
+  </link>
+
+  <link name="topend2">
+    <visual>
+      <geometry>
+  	<cylinder radius=".0485" length=".005" />
+      </geometry>
+      <material name="wood" />
+    </visual>
+  </link>
+
+  <joint name="base_to_top" type="fixed">
+    <parent link="base_link" />
+    <child link="top" />
+    <origin xyz="0.0 0.0 0.04" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="top_to_end1" type="fixed">
+    <parent link="top" />
+    <child link="topend1" />
+    <origin xyz=".05 0.0 0.0" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="top_to_end2" type="fixed">
+    <parent link="top" />
+    <child link="topend2" />
+    <origin xyz="-.05 0.0 0.0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Post -->
+  <link name="post1">
+    <visual>
+      <geometry>
+  	<cylinder radius=".006375" length=".06" />
+      </geometry>
+      <material name="black" />
+    </visual>
+  </link>
+
+  <link name="ball1">
+    <visual>
+      <geometry>
+  	<sphere radius=".015" />
+      </geometry>
+      <material name="gray" />
+    </visual>
+  </link>
+
+  
+  <link name="post2">
+    <visual>
+      <geometry>
+  	<cylinder radius=".006375" length=".06" />
+      </geometry>
+      <material name="black" />
+    </visual>
+  </link>
+
+  <link name="ball2">
+    <visual>
+      <geometry>
+  	<sphere radius=".015" />
+      </geometry>
+      <material name="gray" />
+    </visual>
+  </link>
+
+  <joint name="topend1_to_post" type="fixed" >
+    <parent link="topend1" />
+    <child link="post1" />
+    <origin xyz=".02 0 -.035" />
+  </joint>
+
+  <joint name="topend2_to_post" type="fixed" >
+    <parent link="topend2" />
+    <child link="post2" />
+    <origin xyz="-.025 0 -.035" />
+  </joint>
+
+  <joint name="post1_to_ball" type="fixed" >
+    <parent link="post1" />
+    <child link="ball1" />
+    <origin xyz="0 0 -.0375" />
+  </joint>  
+
+  <joint name="post2_to_ball" type="fixed" >
+    <parent link="post2" />
+    <child link="ball2" />
+    <origin xyz="0 0 -.0375" />
+  </joint>  
+
+
+</robot>
