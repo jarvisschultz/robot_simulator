@@ -1,0 +1,14 @@
+<launch> 
+  <!-- first let's add the static frame broadcaster that broadcasts frames in a default config -->
+
+  <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
+  <!-- LAUNCH ROBOTS -->
+  <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
+
+  <!-- robot number 1 -->
+  <group ns="robot_1" >
+    <node pkg="robot_simulator" type="robot_simulator" name="simulator"
+	  output="screen" respawn="true" />
+  </group>  
+
+</launch>

@@ -63,7 +63,7 @@ private:
     Eigen::Vector2d inputs;
     int robot_index;
     bool running_flag;
-
+    tf::TransformBroadcaster br;
    
 
 
@@ -126,11 +126,47 @@ public:
 	    Eigen::Vector3d c = pose;
 	    nav_msgs::Odometry odom;
 
-	    std::string ns = ros::this_node::getNamespace();
+	    std::string ns = ros::names::clean(ros::this_node::getNamespace());
 	    std::stringstream ss;
-	    ss << "base_footprint_kinect_" << ns;
-	    
-	    
+	    if (ns.size() > 1)
+		ss << "base_footprint_kinect_" << ns.substr(1);
+	    else 
+		ss << "base_footprint_kinect";
+	    // ROS_INFO("Frame name = %s", ss.str().c_str());
+
+	    odom.header.stamp = ros::Time::now();
+	    odom.header.frame_id = "map";
+	    odom.child_frame_id = ss.str();
+	    odom.pose.pose.position.x = c(0);
+	    odom.pose.pose.position.y = -c(1);
+	    odom.pose.pose.position.z = 0;
+
+	    double theta = -c(2);
+	    geometry_msgs::Quaternion quat =
+		tf::createQuaternionMsgFromYaw(clamp_angle(theta));
+	    odom.pose.pose.orientation = quat;
+
+	    ROS_DEBUG("Simulator publishing on vo topic...");
+	    pub.publish(odom);
+
+	    // now let's send out the corresponding transform as well
+	    geometry_msgs::TransformStamped trans;
+	    tf::Quaternion q1, q2;
+	    q1 = tf::createQuaternionFromYaw(clamp_angle(theta));
+	    q2 = tf::Quaternion(1.0,0,0,0);
+	    q1 = q1*q2;
+	    tf::quaternionTFToMsg(q1, quat);
+
+	    trans.header.stamp = ros::Time::now();
+	    trans.header.frame_id = odom.header.frame_id;
+	    trans.child_frame_id = odom.child_frame_id;
+	    trans.transform.translation.x = odom.pose.pose.position.x;
+	    trans.transform.translation.y = odom.pose.pose.position.y;
+	    trans.transform.translation.z = odom.pose.pose.position.z;
+	    trans.transform.rotation = quat;
+
+	    ROS_DEBUG("Sending transform for output of estimator node");
+	    br.sendTransform(trans);
 
 	    return;
 	}
