@@ -135,7 +135,7 @@ public:
 	    // ROS_INFO("Frame name = %s", ss.str().c_str());
 
 	    odom.header.stamp = ros::Time::now();
-	    odom.header.frame_id = "map";
+	    odom.header.frame_id = "/map";
 	    odom.child_frame_id = ss.str();
 	    odom.pose.pose.position.x = c(0);
 	    odom.pose.pose.position.y = -c(1);

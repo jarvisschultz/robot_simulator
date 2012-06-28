@@ -6,9 +6,18 @@
   <!-- LAUNCH ROBOTS -->
   <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
 
+  <param name="/robot_description" textfile="$(find robot_simulator)/urdf/robot_base.urdf" />
   <!-- robot number 1 -->
   <group ns="robot_1" >
-    <include file="$(find robot_simulator)/launch/robot_display.launch" />
+    <!-- set all parameters for this namespace -->
+    <param name="tf_prefix" value="robot_1" />
+    <param name="robot_description" textfile="$(find robot_simulator)/urdf/robot_base.urdf" />
+
+    <!-- launch all required nodes -->
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher"/>
+    <node pkg="tf" type="static_transform_publisher" name="model_connector"
+	  args="0 0 0 0 0 0 1 /robot_1/base_footprint_kinect_robot_1 /robot_1/base_link 100" />
     <node pkg="robot_simulator" type="robot_simulator" name="simulator"
 	  output="screen" respawn="true" />
   </group>  
