@@ -128,12 +128,13 @@ public:
 
 	    std::string ns = ros::names::clean(ros::this_node::getNamespace());
 	    std::stringstream ss;
-	    if (ns.size() > 1)
-		ss << "base_footprint_kinect_" << ns.substr(1);
-	    else 
-		ss << "base_footprint_kinect";
-	    // ROS_INFO("Frame name = %s", ss.str().c_str());
-
+	    // if (ns.size() > 1)
+	    // 	// ss << "base_footprint_kinect_" << ns.substr(1);
+	    // 	ss << "robot_" << ns.substr(1) << "/base_footprint_kinect";	    
+	    // else 
+	    // 	ss << "base_footprint_kinect";
+	    ss << "base_footprint_kinect";
+	    
 	    odom.header.stamp = ros::Time::now();
 	    odom.header.frame_id = "/map";
 	    odom.child_frame_id = ss.str();
