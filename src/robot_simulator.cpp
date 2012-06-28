@@ -26,16 +26,17 @@
 #include <tf/transform_listener.h>
 #include <tf/transform_datatypes.h>
 #include <tf_conversions/tf_eigen.h>
-#include <puppeteer_msgs/PointPlus.h>
-#include <puppeteer_msgs/Robots.h>
-#include <geometry_msgs/Point.h>
 #include <ros/package.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
+#include <angles/angles.h>
+
 #include "puppeteer_msgs/RobotCommands.h"
+
+
 
 /////////////
 // GLOBALS //
@@ -114,7 +115,8 @@ public:
 	    pose(2) += inputs(1) * dt;
 
 	    // correct angle:
-	    pose(2) = clamp_angle(pose(2));	    
+	    // pose(2) = clamp_angle(pose(2));
+	    pose(2) = angles::normalize_angle(pose(2));
 	    
 	    tcall = ros::Time::now();
 	    return;
@@ -144,7 +146,7 @@ public:
 
 	    double theta = -c(2);
 	    geometry_msgs::Quaternion quat =
-		tf::createQuaternionMsgFromYaw(clamp_angle(theta));
+		tf::createQuaternionMsgFromYaw(angles::normalize_angle(theta));
 	    odom.pose.pose.orientation = quat;
 
 	    ROS_DEBUG("Simulator publishing on vo topic...");
@@ -153,7 +155,7 @@ public:
 	    // now let's send out the corresponding transform as well
 	    geometry_msgs::TransformStamped trans;
 	    tf::Quaternion q1, q2;
-	    q1 = tf::createQuaternionFromYaw(clamp_angle(theta));
+	    q1 = tf::createQuaternionFromYaw(angles::normalize_angle(theta));
 	    q2 = tf::Quaternion(1.0,0,0,0);
 	    q1 = q1*q2;
 	    tf::quaternionTFToMsg(q1, quat);
@@ -254,7 +256,7 @@ public:
 	{
 	    pose(0) = x;
 	    pose(1) = y;
-	    pose(2) = clamp_angle(th);
+	    pose(2) = angles::normalize_angle(th);
 	    
 	    return;
 	}
@@ -269,29 +271,6 @@ public:
 	    return odom;
 	}
     
-    
-    // in this function, we take in two angles, and using one as the
-    // reference, we keep adding and subtracting 2pi from the other to
-    // find the mininmum angle between the two:
-    void angle_correction(double& a, double& ref)
-	{
-	    while ((a-ref) > M_PI) a -= 2*M_PI;
-	    while ((a-ref) < -M_PI) a += 2*M_PI;
-	}
-
-
-    
-    double clamp_angle(double theta)
-	{
-	    double th = theta;
-	    while(th > M_PI)
-		th -= 2.0*M_PI;
-	    while(th <= -M_PI)
-		th += 2.0*M_PI;
-	    return th;
-	}
-
-
 }; // END Simulator class
 
 
