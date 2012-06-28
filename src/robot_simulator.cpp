@@ -31,7 +31,6 @@
 #include <nav_msgs/Path.h>
 #include <Eigen/Core>
 #include <Eigen/Dense>
-
 #include <angles/angles.h>
 
 #include "puppeteer_msgs/RobotCommands.h"
@@ -115,7 +114,6 @@ public:
 	    pose(2) += inputs(1) * dt;
 
 	    // correct angle:
-	    // pose(2) = clamp_angle(pose(2));
 	    pose(2) = angles::normalize_angle(pose(2));
 	    
 	    tcall = ros::Time::now();
