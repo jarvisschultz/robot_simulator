@@ -1,5 +1,6 @@
 <launch> 
   <!-- first let's add the static frame broadcaster that broadcasts frames in a default config -->
+  <include file="$(find robot_simulator)/launch/default_calibration_frames.launch" />
 
   <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
   <!-- LAUNCH ROBOTS -->
@@ -7,6 +8,7 @@
 
   <!-- robot number 1 -->
   <group ns="robot_1" >
+    <include file="$(find robot_simulator)/launch/robot_display.launch" />
     <node pkg="robot_simulator" type="robot_simulator" name="simulator"
 	  output="screen" respawn="true" />
   </group>  
