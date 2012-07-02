@@ -72,7 +72,7 @@ public:
 	ROS_INFO("Starting up a robot simulator node");
 
 	// define a subscriber for the serial commands
-	sub = n_.subscribe("serial_commands", 100, &Simulator::datacb, this);
+	sub = n_.subscribe("/serial_commands", 100, &Simulator::datacb, this);
 
 	// define a timer to integrate the kinematics forward in time
 	timer = n_.createTimer(ros::Duration(1/INT_FREQUENCY),
@@ -179,7 +179,12 @@ public:
 	    char type = c.type;
 
 	    if (c.robot_index != robot_index && c.robot_index != 9)
-		ROS_WARN("Not the correct robot_index!");
+	    {
+		ROS_DEBUG("Not the correct robot_index "
+			  "(should be %d, actually is %d)!",
+			  robot_index, c.robot_index);
+		return;
+	    }
 
 	    switch(type)
 	    {
