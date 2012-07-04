@@ -20,9 +20,10 @@
     <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher"/>
     <node pkg="tf" type="static_transform_publisher" name="model_connector"
 	  args="0 0 0 0 0 0 1 base_footprint_kinect base_link 100" />
-    <!-- args="0 0 0 0 0 0 1 $(arg rn)/base_footprint_kinect $(arg rn)/base_link 100" /> -->
     <node pkg="robot_simulator" type="robot_simulator" name="simulator"
 	  output="screen" respawn="true" />
+    <node pkg="topic_tools" type="relay" name="$(arg rn)_relay" 
+	  output="screen" required="true" args="/serial_commands serial_commands" />
   </group>  
 
   <!-- robot number 2 -->
@@ -38,9 +39,10 @@
     <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher"/>
     <node pkg="tf" type="static_transform_publisher" name="model_connector"
 	  args="0 0 0 0 0 0 1 base_footprint_kinect base_link 100" />
-    <!-- args="0 0 0 0 0 0 1 $(arg rn)/base_footprint_kinect $(arg rn)/base_link 100" /> -->
     <node pkg="robot_simulator" type="robot_simulator" name="simulator"
 	  output="screen" respawn="true" />
+    <node pkg="topic_tools" type="relay" name="$(arg rn)_relay" 
+	  output="screen" required="true" args="/serial_commands serial_commands" />
   </group>  
 
 
