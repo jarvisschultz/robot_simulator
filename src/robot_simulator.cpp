@@ -32,6 +32,8 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <angles/angles.h>
+#include "boost/random.hpp"
+#include "boost/generator_iterator.hpp"
 
 #include "puppeteer_msgs/RobotCommands.h"
 
@@ -44,7 +46,8 @@
 #define WHEEL_DIA (0.07619999999999)
 #define WIDTH (0.148/2.0)
 #define PUB_FREQUENCY (30.0)
-
+#define DEFAULT_DRIFT (0.0)
+#define DEFAULT_NOISE (0.0)
 
 
 ///////////////////////////
@@ -103,20 +106,38 @@ public:
     }
 
 
+    template<class T>
+    double gen_normal(T &generator)
+	{
+	    return generator();
+	}
+
+
     void timercb(const ros::TimerEvent& e)
 	{
 	    ROS_DEBUG("Simulator timer callback triggered... integrate kinematics");
 	    static ros::Time tcall = ros::Time::now();
-
-	    double dt = (ros::Time::now()-tcall).toSec();
+	    static boost::variate_generator<boost::mt19937, boost::normal_distribution<> >
+		noise(boost::mt19937(time(0)),
+		      boost::normal_distribution<>(1,1));
+	    double dt = (ros::Time::now()-tcall).toSec();	    
 	    
-	    pose(0) += cos(pose(2)) * inputs(0) * dt;
-	    pose(1) += sin(pose(2)) * inputs(0) * dt;
-	    pose(2) += inputs(1) * dt;
-
+	    // now we need to add noise to inputs to simulate the drift term
+	    double d = 0.0;
+	    if (ros::param::has("/simulator_drift"))
+	    	ros::param::get("/simulator_drift", d);
+	    else
+	    	d = DEFAULT_DRIFT;
+	    Eigen::Vector2d drift, tmpinputs;
+	    drift << d*gen_normal(noise), d*0.25*gen_normal(noise);
+	    tmpinputs = inputs+drift;
+	    
+	    pose(0) += cos(pose(2)) * tmpinputs(0) * dt;
+	    pose(1) += sin(pose(2)) * tmpinputs(0) * dt;
+	    pose(2) += tmpinputs(1) * dt;
+		
 	    // correct angle:
 	    pose(2) = angles::normalize_angle(pose(2));
-	    
 	    tcall = ros::Time::now();
 	    return;
 	}
@@ -124,16 +145,25 @@ public:
 
     void publishcb(const ros::TimerEvent& e)
 	{
+	    static boost::variate_generator<boost::mt19937, boost::normal_distribution<> >
+		noise(boost::mt19937(time(0)),
+		    boost::normal_distribution<>());
+	    // let's make a copy of pose, and then add some noise to it:
 	    Eigen::Vector3d c = pose;
-	    nav_msgs::Odometry odom;
 
-	    std::string ns = ros::names::clean(ros::this_node::getNamespace());
+	    // now we need to add noise to the state
+	    double d = 0.0;
+	    if (ros::param::has("/simulator_noise"))
+	    	ros::param::get("/simulator_noise", d);
+	    else
+	    	d = DEFAULT_DRIFT;
+	    Eigen::Vector3d drift;
+	    drift << d*gen_normal(noise),d*gen_normal(noise),10*d*gen_normal(noise);
+	    c += drift;
+
+	    // build and publish the odometry message:
+	    nav_msgs::Odometry odom;
 	    std::stringstream ss;
-	    // if (ns.size() > 1)
-	    // 	// ss << "base_footprint_kinect_" << ns.substr(1);
-	    // 	ss << "robot_" << ns.substr(1) << "/base_footprint_kinect";	    
-	    // else 
-	    // 	ss << "base_footprint_kinect";
 	    ss << "base_footprint_kinect";
 	    
 	    odom.header.stamp = ros::Time::now();
