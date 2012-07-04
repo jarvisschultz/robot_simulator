@@ -117,24 +117,11 @@ public:
 	{
 	    ROS_DEBUG("Simulator timer callback triggered... integrate kinematics");
 	    static ros::Time tcall = ros::Time::now();
-	    static boost::variate_generator<boost::mt19937, boost::normal_distribution<> >
-		noise(boost::mt19937(time(0)),
-		      boost::normal_distribution<>(1,1));
 	    double dt = (ros::Time::now()-tcall).toSec();	    
 	    
-	    // now we need to add noise to inputs to simulate the drift term
-	    double d = 0.0;
-	    if (ros::param::has("/simulator_drift"))
-	    	ros::param::get("/simulator_drift", d);
-	    else
-	    	d = DEFAULT_DRIFT;
-	    Eigen::Vector2d drift, tmpinputs;
-	    drift << d*gen_normal(noise), d*0.25*gen_normal(noise);
-	    tmpinputs = inputs+drift;
-	    
-	    pose(0) += cos(pose(2)) * tmpinputs(0) * dt;
-	    pose(1) += sin(pose(2)) * tmpinputs(0) * dt;
-	    pose(2) += tmpinputs(1) * dt;
+	    pose(0) += cos(pose(2)) * inputs(0) * dt;
+	    pose(1) += sin(pose(2)) * inputs(0) * dt;
+	    pose(2) += inputs(1) * dt;
 		
 	    // correct angle:
 	    pose(2) = angles::normalize_angle(pose(2));

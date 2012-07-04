@@ -1,7 +1,7 @@
 Background\ ColorB=0.498039
 Background\ ColorG=0.666667
 Background\ ColorR=0.666667
-Camera\ Config=0.434797 1.33268 4.83196 0.773541 0.80426 -0.959384
+Camera\ Config=0.534797 1.43268 3.77468 -0.724159 0.650591 0.114227
 Camera\ Type=rviz::OrbitViewController
 Fixed\ Frame=/map
 Grid.Alpha=0.5
@@ -214,6 +214,7 @@ RobotModel2.Robot\ Description=robot_2/robot_description
 RobotModel2.TF\ Prefix=robot_2
 RobotModel2.Update\ Interval=0
 RobotModel2.Visual\ Enabled=1
+TF.All\ Enabled=1
 TF.Enabled=1
 TF.Frame\ Timeout=15
 TF.Marker\ Scale=1
