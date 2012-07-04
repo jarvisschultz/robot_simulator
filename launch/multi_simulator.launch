@@ -5,47 +5,26 @@
   <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
   <!-- LAUNCH ROBOTS -->
   <!-- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% -->
-
-  <param name="/robot_description" textfile="$(find robot_simulator)/urdf/robot_base.urdf" />
   <!-- robot number 1 -->
   <group ns="robot_1" >
     <arg name="rn" value="robot_1" />
     <!-- set all parameters for this namespace -->
     <param name="robot_index" value="1" />
-    <param name="tf_prefix" value="$(arg rn)" />
-    <param name="robot_description" textfile="$(find robot_simulator)/urdf/robot_base.urdf" />
-
-    <!-- launch all required nodes -->
-    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
-    <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher"/>
-    <node pkg="tf" type="static_transform_publisher" name="model_connector"
-	  args="0 0 0 0 0 0 1 base_footprint_kinect base_link 100" />
-    <node pkg="robot_simulator" type="robot_simulator" name="simulator"
-	  output="screen" respawn="true" />
-    <node pkg="topic_tools" type="relay" name="$(arg rn)_relay" 
-	  output="screen" required="true" args="/serial_commands serial_commands" />
+    <include file="$(find robot_simulator)/launch/single_robot_simulator.launch" >
+      <arg name="rn" value="$(arg rn)" />
+    </include>
   </group>  
+
 
   <!-- robot number 2 -->
   <group ns="robot_2" >
     <arg name="rn" value="robot_2" />
     <!-- set all parameters for this namespace -->
     <param name="robot_index" value="4" />
-    <param name="tf_prefix" value="$(arg rn)" />
-    <param name="robot_description" textfile="$(find robot_simulator)/urdf/robot_base.urdf" />
-
-    <!-- launch all required nodes -->
-    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
-    <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher"/>
-    <node pkg="tf" type="static_transform_publisher" name="model_connector"
-	  args="0 0 0 0 0 0 1 base_footprint_kinect base_link 100" />
-    <node pkg="robot_simulator" type="robot_simulator" name="simulator"
-	  output="screen" respawn="true" />
-    <node pkg="topic_tools" type="relay" name="$(arg rn)_relay" 
-	  output="screen" required="true" args="/serial_commands serial_commands" />
+    <include file="$(find robot_simulator)/launch/single_robot_simulator.launch" >
+      <arg name="rn" value="$(arg rn)" />
+    </include>
   </group>  
-
-
 
 
 </launch>
