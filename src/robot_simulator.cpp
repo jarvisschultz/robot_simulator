@@ -77,7 +77,6 @@ public:
 	ROS_INFO("Starting up a robot simulator node\n");
 
 	// define a subscriber for the serial commands
-	// sub = n_.subscribe("/serial_commands", 100, &Simulator::datacb, this);
 	sub = n_.subscribe("serial_commands", 100, &Simulator::datacb, this);
 
 	// define a timer to integrate the kinematics forward in time
