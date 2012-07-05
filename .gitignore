@@ -1,5 +1,4 @@
 # ignore these files
-Makefile
 *.pcd
 
 # ignore these directories and the files in them.

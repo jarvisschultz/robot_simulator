@@ -1,14 +1,13 @@
 <package>
   <description brief="robot_simulator">
 
-     robot_simulator
+    robot_simulator
 
   </description>
-  <author>Jarvis</author>
+  <author>Jarvis Schultz</author>
   <license>BSD</license>
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/robot_simulator</url>
-
   <depend package="puppeteer_msgs"/>
   <depend package="std_msgs"/>
   <depend package="rospy"/>
@@ -17,7 +16,8 @@
   <depend package="tf"/>
   <depend package="tf_conversions"/>
   <depend package="angles" />
-
 </package>
+
+
 
 
