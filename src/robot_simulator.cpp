@@ -48,6 +48,8 @@
 #define PUB_FREQUENCY (30.0)
 #define DEFAULT_DRIFT (0.0)
 #define DEFAULT_NOISE (0.0)
+#define MAX_FLOATS (5) // maximum number of floats that we can send
+		       // with one command
 
 
 ///////////////////////////
@@ -59,7 +61,7 @@ class Simulator
 private:
     ros::NodeHandle n_;
     ros::Subscriber sub;
-    ros::Publisher pub;
+    ros::Publisher pub, ser_pub;
     ros::Timer timer, pub_time;
     // nav_msgs::Odometry pose_odom;
     Eigen::Vector3d pose;
@@ -72,7 +74,7 @@ private:
 
 public:
     Simulator() {
-	ROS_INFO("Starting up a robot simulator node");
+	ROS_INFO("Starting up a robot simulator node\n");
 
 	// define a subscriber for the serial commands
 	// sub = n_.subscribe("/serial_commands", 100, &Simulator::datacb, this);
@@ -87,6 +89,10 @@ public:
 	pub_time = n_.createTimer(ros::Duration(1/PUB_FREQUENCY),
 				  &Simulator::publishcb, this);
 	pub = n_.advertise<nav_msgs::Odometry>("vo", 100);
+	
+	// create a publisher for telling other nodes what commands we
+	// sent to the robot
+	ser_pub = n_.advertise<geometry_msgs::PointStamped> ("serviced_values", 100);
 	
 	// define a publisher for sending out the current pose of the robot:
 	if (ros::param::has("robot_index"))	
@@ -184,7 +190,7 @@ public:
 	    trans.transform.translation.z = odom.pose.pose.position.z;
 	    trans.transform.rotation = quat;
 
-	    ROS_DEBUG("Sending transform for output of estimator node");
+	    ROS_DEBUG("Sending transform for output of simulator");
 	    br.sendTransform(trans);
 
 	    return;
@@ -195,6 +201,8 @@ public:
 	{
 	    ROS_DEBUG("Serial request received");
 	    char type = c.type;
+	    float vals[MAX_FLOATS];
+	    memset(vals, 0, sizeof(vals));
 
 	    if (c.robot_index != robot_index && c.robot_index != 9)
 	    {
@@ -225,17 +233,25 @@ public:
 		// convert motor speeds to v and w:
 		set_inputs(WHEEL_DIA*(c.v_left+c.v_right)/4.0,
 			   WHEEL_DIA*(c.v_right-c.v_left)/(4.0*WIDTH));
+		vals[0] = c.v_left;
+		vals[1] = c.v_right;
 		break;
 	    case 'd': // EXT_SPEED
 		set_inputs(c.v_robot, c.w_robot);
+		vals[0] = inputs(0);
+		vals[1] = inputs(1);
 		break;
 	    case 'n': // MOT_SPEED_FULL
 		// convert motor speeds to v and w:
 		set_inputs(WHEEL_DIA*(c.v_left+c.v_right)/4.0,
 			   WHEEL_DIA*(c.v_right-c.v_left)/(4.0*WIDTH));
+		vals[0] = c.v_left;
+		vals[1] = c.v_right;
 		break;
 	    case 'i': // EXT_SPEED_FULL
 		set_inputs(c.v_robot, c.w_robot);
+		vals[0] = inputs(0);
+		vals[1] = inputs(1);
 		break;
 	    case 'a': // SET_CONFIG_FULL
 		set_robot_state(c.x, c.y, c.th);
@@ -256,6 +272,15 @@ public:
 		ROS_DEBUG("No need to request information from robot simulator");
 		break;
 	    }
+
+	    // now let's publish the serviced_values topic
+	    geometry_msgs::PointStamped cmd;
+	    cmd.header.frame_id = type;
+	    cmd.header.stamp = ros::Time::now();
+	    cmd.point.x = vals[0];
+	    cmd.point.y = vals[1];
+	    cmd.point.z = vals[2];
+	    ser_pub.publish(cmd);
 	    
 	    return;
 	}
@@ -314,7 +339,6 @@ int main(int argc, char **argv)
 
     ros::NodeHandle n;
 
-    ROS_INFO("Starting Robot Simulator Node...\n");
     Simulator simul;
   
     ros::spin();
