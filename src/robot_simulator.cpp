@@ -46,6 +46,7 @@
 #define WHEEL_DIA (0.07619999999999)
 #define WIDTH (0.148/2.0)
 #define PUB_FREQUENCY (30.0)
+#define TIMEOUT_FREQ (5.0) // frequency that we test for not receiving serial commands
 #define DEFAULT_DRIFT (0.0)
 #define DEFAULT_NOISE (0.0)
 #define MAX_FLOATS (5) // maximum number of floats that we can send
@@ -62,13 +63,14 @@ private:
     ros::NodeHandle n_;
     ros::Subscriber sub;
     ros::Publisher pub, ser_pub;
-    ros::Timer timer, pub_time;
+    ros::Timer timer, pub_time, watchdog;
     // nav_msgs::Odometry pose_odom;
     Eigen::Vector3d pose;
     Eigen::Vector2d inputs;
     int robot_index;
     bool running_flag;
     tf::TransformBroadcaster br;
+    bool timeout;
    
 
 
@@ -77,11 +79,16 @@ public:
 	ROS_INFO("Starting up a robot simulator node\n");
 
 	// define a subscriber for the serial commands
+	timeout = false;
 	sub = n_.subscribe("serial_commands", 100, &Simulator::datacb, this);
 
 	// define a timer to integrate the kinematics forward in time
 	timer = n_.createTimer(ros::Duration(1/INT_FREQUENCY),
 			       &Simulator::timercb, this);
+
+	// create a timer for checking for serial timeouts
+	watchdog = n_.createTimer(ros::Duration(1/TIMEOUT_FREQ),
+				  &Simulator::watchdogcb, this);
 
 	// create another timer to publish the results state of the
 	// robot as an Odometry message and as a tf
@@ -199,6 +206,8 @@ public:
     void datacb(const puppeteer_msgs::RobotCommands& c)
 	{
 	    ROS_DEBUG("Serial request received");
+	    // reset watchdog timer:
+	    timeout = false;
 	    char type = c.type;
 	    float vals[MAX_FLOATS];
 	    memset(vals, 0, sizeof(vals));
@@ -284,6 +293,20 @@ public:
 	    return;
 	}
 
+
+    void watchdogcb(const ros::TimerEvent& e)
+	{
+	    if (fabs(inputs(0)) > 0.005 || fabs(inputs(1)) > 0.005)
+	    {
+		if (timeout)
+		{
+		    set_inputs(0,0);
+		    ROS_ERROR("Robot %d timeout!", robot_index);
+		}
+	    }
+	    timeout = true;
+	    return;
+	}
 
     // util function for setting the current values of the
     // translational and rotational velocity of the simulator
