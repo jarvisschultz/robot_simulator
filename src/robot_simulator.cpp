@@ -45,7 +45,7 @@
 #define INT_FREQUENCY (200.0) // frequency we integrate kinematics at
 #define WHEEL_DIA (0.07619999999999)
 #define WIDTH (0.148/2.0)
-#define PUB_FREQUENCY (30.0)
+#define PUB_FREQUENCY (20.0)
 #define TIMEOUT_FREQ (5.0) // frequency that we test for not receiving serial commands
 #define DEFAULT_DRIFT (0.0)
 #define DEFAULT_NOISE (0.0)
