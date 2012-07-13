@@ -63,6 +63,11 @@
 	<color rgba="0.0 0.0 0.0 0.35 "/>
       </material>
     </visual>
+    <collision>
+      <geometry>
+    	<cylinder length=".14" radius="0.12" />
+      </geometry>
+    </collision> 
   </link>
 
   <joint name="base_to_cover" type="fixed">
@@ -70,7 +75,6 @@
     <child link="cover" />
     <origin xyz="0 0 .045" />
   </joint>  
-
 
   <!-- Left Winch -->
   <link name="left_winch">
