@@ -62,7 +62,7 @@ class Simulator
 private:
     ros::NodeHandle n_;
     ros::Subscriber sub;
-    ros::Publisher pub, ser_pub;
+    ros::Publisher pub, ser_pub, noise_free_pub;
     ros::Timer timer, pub_time, watchdog;
     // nav_msgs::Odometry pose_odom;
     Eigen::Vector3d pose;
@@ -95,6 +95,7 @@ public:
 	pub_time = n_.createTimer(ros::Duration(1/PUB_FREQUENCY),
 				  &Simulator::publishcb, this);
 	pub = n_.advertise<nav_msgs::Odometry>("vo", 100);
+	noise_free_pub = n_.advertise<nav_msgs::Odometry>("vo_noise_free", 100);
 	
 	// create a publisher for telling other nodes what commands we
 	// sent to the robot
@@ -180,6 +181,17 @@ public:
 	    ROS_DEBUG("Simulator publishing on vo topic...");
 	    pub.publish(odom);
 
+	    // now publish the noise-free version:
+	    c = pose;
+	    odom.pose.pose.position.x = c(0);
+	    odom.pose.pose.position.y = -c(1);
+	    odom.pose.pose.position.z = 0;
+	    theta = -c(2);
+	    quat =
+		tf::createQuaternionMsgFromYaw(angles::normalize_angle(theta));
+	    odom.pose.pose.orientation = quat;
+	    noise_free_pub.publish(odom);
+	    
 	    // now let's send out the corresponding transform as well
 	    geometry_msgs::TransformStamped trans;
 	    tf::Quaternion q1, q2;
