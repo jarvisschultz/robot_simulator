@@ -4,6 +4,7 @@ import roslib; roslib.load_manifest('robot_simulator')
 import rospy
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PointStamped
+from geometry_msgs.msg import QuaternionStamped
 import trep
 from trep import tx, ty, tz, rx, ry, rz
 from math import sin, cos
@@ -11,7 +12,7 @@ from math import pi as mpi
 import numpy as np
 import sys
 import tf
-import math
+
 
 ## define some global constants:
 BALL_MASS = 0.1244 ## kg
@@ -86,6 +87,7 @@ class MassSystem3D:
                     tz('zr', name='z-robot', kinematic=True) ]]]
         system.import_frames(frames)
         trep.potentials.Gravity(system, (0, -g, 0))
+        trep.forces.Damping(system, 0.05)
 
         # add string constraint as a kinematic configuration var
         trep.constraints.Distance(system, 'z-mass', 'z-robot','r')
@@ -104,6 +106,7 @@ class MassSystem3D:
 class MassSimulator:
     def __init__(self):
         rospy.loginfo("Starting mass_simulator node!")
+
         ## define a subscriber and callback for the robot_simulator
         self.sub = rospy.Subscriber("vo_noise_free", Odometry, self.inputcb)
         
@@ -132,8 +135,12 @@ class MassSimulator:
         p = PointStamped()
         p.header = data.header
         p.point = data.pose.pose.position
+        quat = QuaternionStamped()
+        quat.quaternion = data.pose.pose.orientation
+        quat.header = data.header
         try:
             ptrans = self.listener.transformPoint("/optimization_frame", p)
+            qtrans = self.listener.transformQuaternion("/optimization_frame", quat)
         except (tf.Exception):
             rospy.logwarn("tf exception caught !")
             return
@@ -181,10 +188,17 @@ class MassSimulator:
             self.mass_pub.publish(np)
 
             ## now we can send out the transform
+            ns = rospy.get_namespace()
+            fr = "mass_location"
+            if len(ns) > 1:
+                fr = rospy.names.canonicalize_name(ns+fr)
+
+            tmp = qtrans.quaternion
+            quat = (tmp.x, tmp.y, tmp.z, tmp.w)
             self.br.sendTransform((np.point.x, np.point.y, np.point.z),
-                                  tf.transformations.quaternion_from_euler(0,0,0),
+                                  quat,
                                   np.header.stamp,
-                                  "mass_location",
+                                  fr,
                                   "/optimization_frame")
             
         return
