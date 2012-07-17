@@ -13,18 +13,20 @@
     <include file="$(find robot_simulator)/launch/single_robot_simulator.launch" >
       <arg name="rn" value="$(arg rn)" />
     </include>
+    <node pkg="robot_simulator" name="mass_simulator" type="suspended_mass_trep.py" 
+	  output="screen" respawn="true" />
   </group>  
 
 
-  <!-- robot number 2 -->
-  <group ns="robot_2" >
-    <arg name="rn" value="robot_2" />
-    <!-- set all parameters for this namespace -->
-    <param name="robot_index" value="4" />
-    <include file="$(find robot_simulator)/launch/single_robot_simulator.launch" >
-      <arg name="rn" value="$(arg rn)" />
-    </include>
-  </group>  
+  <!-- <!-\- robot number 2 -\-> -->
+  <!-- <group ns="robot_2" > -->
+  <!--   <arg name="rn" value="robot_2" /> -->
+  <!--   <!-\- set all parameters for this namespace -\-> -->
+  <!--   <param name="robot_index" value="4" /> -->
+  <!--   <include file="$(find robot_simulator)/launch/single_robot_simulator.launch" > -->
+  <!--     <arg name="rn" value="$(arg rn)" /> -->
+  <!--   </include> -->
+  <!-- </group>   -->
 
 
 </launch>
