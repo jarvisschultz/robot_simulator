@@ -51,7 +51,7 @@
 #define DEFAULT_NOISE (0.0)
 #define MAX_FLOATS (5) // maximum number of floats that we can send
 		       // with one command
-
+#define DEFAULT_STRING_LEN (1)
 
 ///////////////////////////
 // OBJECTS AND FUNCTIONS //
@@ -342,15 +342,6 @@ public:
 	}
 
 
-    // util function for converting the pose to an odometry message
-    nav_msgs::Odometry convert_pose_to_odom(const Eigen::Vector3d& p)
-	{
-	    nav_msgs::Odometry odom;
-
-
-	    return odom;
-	}
-    
 }; // END Simulator class
 
 

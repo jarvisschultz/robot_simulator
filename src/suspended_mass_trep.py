@@ -142,7 +142,7 @@ class MassSimulator:
             ptrans = self.listener.transformPoint("/optimization_frame", p)
             qtrans = self.listener.transformQuaternion("/optimization_frame", quat)
         except (tf.Exception):
-            rospy.logwarn("tf exception caught !")
+            rospy.loginfo("tf exception caught !")
             return
 
         ## if we have not initialized the VI, let's do it, otherwise,

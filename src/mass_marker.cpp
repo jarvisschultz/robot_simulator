@@ -33,6 +33,7 @@ private:
     visualization_msgs::Marker mass_marker;
     visualization_msgs::Marker string_marker;
     tf::TransformListener listener;
+    std::string robot_frame;
 
 
 public:
@@ -60,12 +61,14 @@ public:
 	mass_marker.color.g = 1.0f;
 	mass_marker.color.b = 1.0f;
 	mass_marker.color.a = 1.0f;
-	mass_marker.lifetime = ros::Duration();
+	mass_marker.lifetime = ros::Duration(0.1);
 
 	string_marker.type = visualization_msgs::Marker::LINE_LIST;
 	string_marker.scale.x = .01;
 	string_marker.color.a = 1.0f;
 	string_marker.points.resize(2);
+	string_marker.lifetime = ros::Duration(0.1);
+	
 	return;
     }
 
@@ -84,9 +87,13 @@ public:
 	    geometry_msgs::TransformStamped ts;
 	    geometry_msgs::Point pt;
 	    try{
-	    	listener.lookupTransform(
-	    	    p.header.frame_id, "/robot_1/base_link",
-	    	    p.header.stamp-ros::Duration(0.05), trans);
+		std::string err;
+		ros::Time trans_time;
+		listener.getLatestCommonTime(p.header.frame_id, "base_link",
+					     trans_time, &err);
+		listener.lookupTransform(
+	    	    p.header.frame_id, "base_link",
+	    	    trans_time, trans);
 	    	tf::transformStampedTFToMsg(trans, ts);
 	    	pt.x = ts.transform.translation.x;
 	    	pt.y = ts.transform.translation.y;
@@ -94,12 +101,11 @@ public:
 	    	string_marker.points[1] = pt;
 	    }
 	    catch(tf::TransformException& ex){
-	    	ROS_DEBUG(
+	    	ROS_INFO(
 	    	    "Error trying to lookupTransform: %s", ex.what());
 	    	return;
 	    }
 	    marker_pub.publish(string_marker);
-	    
 
 	    return;
 	}

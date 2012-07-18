@@ -16,7 +16,7 @@
     <node pkg="robot_simulator" name="mass_simulator" type="suspended_mass_trep.py" 
 	  output="screen" respawn="true" />
     <node pkg="robot_simulator" name="marker" type="mass_marker" 
-	  output="log" respawn="true" />
+	  output="screen" respawn="true" />
   </group>  
 
 
