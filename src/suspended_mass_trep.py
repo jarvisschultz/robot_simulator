@@ -127,13 +127,7 @@ class MassSimulator:
 
         return
     
-    
-    def hat(self, w):
-        return np.array([[0, -w[2], w[1]],
-                         [w[2], 0, -w[0]],
-                         [-w[1], w[0], 0]])
 
-                
     def inputcb(self, data):
         rospy.logdebug("inputcb triggered")
         ## so the first thing that we need to do is get the location
@@ -204,9 +198,7 @@ class MassSimulator:
 
             zvec = np.array([q[0]-ptrans.point.x, q[1]-ptrans.point.y, q[2]-ptrans.point.z])
             qtmp = np.array([qtrans.quaternion.x, qtrans.quaternion.y, qtrans.quaternion.z, qtrans.quaternion.w])
-            th = 2.0*np.arccos(qtmp[-1])
-            w = qtmp[0:3]/np.sin(th/2.0)
-            R1 = sp.linalg.expm2(th*self.hat(w))
+            R1 = tf.transformations.quaternion_matrix(qtmp)[:3,:3]
             yvec = -1.0*R1[:,1]
             xvec = np.cross(yvec, zvec)
             R = np.column_stack((xvec,yvec,zvec,np.array([0,0,0])))
