@@ -36,3 +36,4 @@ add_definitions(${EIGEN_DEFINITIONS})
 
 rosbuild_add_executable(robot_simulator src/robot_simulator.cpp)
 rosbuild_add_executable(rand_test src/rand_test.cpp)
+rosbuild_add_executable(mass_marker src/mass_marker.cpp)

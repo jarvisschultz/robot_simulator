@@ -16,8 +16,5 @@
   <depend package="tf"/>
   <depend package="tf_conversions"/>
   <depend package="angles" />
+  <depend package="visualization_msgs"/>
 </package>
-
-
-
-
