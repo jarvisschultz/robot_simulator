@@ -43,7 +43,8 @@
 // GLOBALS //
 /////////////
 #define INT_FREQUENCY (200.0) // frequency we integrate kinematics at
-#define WHEEL_DIA (0.07619999999999)
+#define WHEEL_DIA (0.0761999999)
+#define PULLEY_DIA (0.034924999)
 #define WIDTH (0.148/2.0)
 #define PUB_FREQUENCY (30.0)
 #define TIMEOUT_FREQ (5.0) // frequency that we test for not receiving serial commands
@@ -66,7 +67,7 @@ private:
     ros::Timer timer, pub_time, watchdog;
     // nav_msgs::Odometry pose_odom;
     Eigen::Vector3d pose;
-    Eigen::Vector2d inputs;
+    Eigen::Vector2d inputs, str_inputs, strings;
     int robot_index;
     bool running_flag;
     tf::TransformBroadcaster br;
