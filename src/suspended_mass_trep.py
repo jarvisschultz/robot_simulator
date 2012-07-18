@@ -193,11 +193,9 @@ class MassSimulator:
             if len(ns) > 1:
                 fr = rospy.names.canonicalize_name(ns+fr)
 
-            # tmp = qtrans.quaternion
-            # quat = (tmp.x, tmp.y, tmp.z, tmp.w)
-
             zvec = np.array([q[0]-ptrans.point.x, q[1]-ptrans.point.y, q[2]-ptrans.point.z])
-            qtmp = np.array([qtrans.quaternion.x, qtrans.quaternion.y, qtrans.quaternion.z, qtrans.quaternion.w])
+            quat = qtrans.quaternion
+            qtmp = np.array([quat.x, quat.y, quat.z, quat.w])
             R1 = tf.transformations.quaternion_matrix(qtmp)[:3,:3]
             yvec = -1.0*R1[:,1]
             xvec = np.cross(yvec, zvec)
