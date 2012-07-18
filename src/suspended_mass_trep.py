@@ -12,7 +12,7 @@ from math import pi as mpi
 import numpy as np
 import sys
 import tf
-
+import scipy as sp
 
 ## define some global constants:
 BALL_MASS = 0.1244 ## kg
@@ -127,6 +127,12 @@ class MassSimulator:
 
         return
     
+    
+    def hat(self, w):
+        return np.array([[0, -w[2], w[1]],
+                         [w[2], 0, -w[0]],
+                         [-w[1], w[0], 0]])
+
                 
     def inputcb(self, data):
         rospy.logdebug("inputcb triggered")
@@ -178,14 +184,14 @@ class MassSimulator:
             self.sys.take_step(dt, rho)
             ## now we can get the state of the system
             q = self.sys.get_current_configuration()
-            np = PointStamped()
-            np.point.x = q[0]
-            np.point.y = q[1]
-            np.point.z = q[2]
-            np.header.frame_id = "/optimization_frame"
-            np.header.stamp = rospy.rostime.get_rostime()
+            new_point = PointStamped()
+            new_point.point.x = q[0]
+            new_point.point.y = q[1]
+            new_point.point.z = q[2]
+            new_point.header.frame_id = "/optimization_frame"
+            new_point.header.stamp = rospy.rostime.get_rostime()
             rospy.logdebug("Publishing mass location")
-            self.mass_pub.publish(np)
+            self.mass_pub.publish(new_point)
 
             ## now we can send out the transform
             ns = rospy.get_namespace()
@@ -193,14 +199,24 @@ class MassSimulator:
             if len(ns) > 1:
                 fr = rospy.names.canonicalize_name(ns+fr)
 
-            tmp = qtrans.quaternion
-            quat = (tmp.x, tmp.y, tmp.z, tmp.w)
-            self.br.sendTransform((np.point.x, np.point.y, np.point.z),
+            # tmp = qtrans.quaternion
+            # quat = (tmp.x, tmp.y, tmp.z, tmp.w)
+
+            zvec = np.array([q[0]-ptrans.point.x, q[1]-ptrans.point.y, q[2]-ptrans.point.z])
+            qtmp = np.array([qtrans.quaternion.x, qtrans.quaternion.y, qtrans.quaternion.z, qtrans.quaternion.w])
+            th = 2.0*np.arccos(qtmp[-1])
+            w = qtmp[0:3]/np.sin(th/2.0)
+            R1 = sp.linalg.expm2(th*self.hat(w))
+            yvec = -1.0*R1[:,1]
+            xvec = np.cross(yvec, zvec)
+            R = np.column_stack((xvec,yvec,zvec,np.array([0,0,0])))
+            R = np.row_stack((R,np.array([0,0,0,1])))                             
+            quat = tuple(tf.transformations.quaternion_from_matrix(R).tolist())
+            self.br.sendTransform((new_point.point.x, new_point.point.y, new_point.point.z),
                                   quat,
-                                  np.header.stamp,
+                                  new_point.header.stamp,
                                   fr,
                                   "/optimization_frame")
-            
         return
         
         
