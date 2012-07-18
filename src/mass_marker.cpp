@@ -18,6 +18,8 @@
 #include <ros/ros.h>
 #include <visualization_msgs/Marker.h>
 #include <geometry_msgs/PointStamped.h>
+#include <tf/transform_listener.h>
+#include <tf/transform_datatypes.h>
 
 //---------------------------------------------------------------------------
 // Objects and Functions
@@ -29,6 +31,8 @@ private:
     ros::Subscriber mass_sub;
     ros::Publisher marker_pub;
     visualization_msgs::Marker mass_marker;
+    visualization_msgs::Marker string_marker;
+    tf::TransformListener listener;
 
 
 public:
@@ -39,11 +43,15 @@ public:
 	marker_pub = n_.advertise<visualization_msgs::Marker>("mass_marker", 1);
 
 	// define the marker properties:
-	mass_marker.ns = "markers";
+	mass_marker.ns = string_marker.ns = "markers";
+	mass_marker.action = string_marker.action = visualization_msgs::Marker::ADD;
 	int id = 0;
 	if (ros::param::has("robot_index"))
 	    ros::param::get("robot_index", id);
 	mass_marker.id = id;
+	string_marker.id = id+1;
+
+	// visualization_properties and types
 	mass_marker.type = visualization_msgs::Marker::SPHERE;
 	mass_marker.scale.x = 0.06;
 	mass_marker.scale.y = 0.06;
@@ -54,15 +62,44 @@ public:
 	mass_marker.color.a = 1.0f;
 	mass_marker.lifetime = ros::Duration();
 
+	string_marker.type = visualization_msgs::Marker::LINE_LIST;
+	string_marker.scale.x = .01;
+	string_marker.color.a = 1.0f;
+	string_marker.points.resize(2);
 	return;
     }
 
     void datacb(const geometry_msgs::PointStamped &p)
 	{
 	    ROS_DEBUG("Entered marker datacb");
+	    // first publish the mass marker
 	    mass_marker.pose.position = p.point;
 	    mass_marker.header = p.header;
 	    marker_pub.publish(mass_marker);
+
+	    // now the string marker
+	    string_marker.header = p.header;
+	    string_marker.points[0] = p.point;
+	    tf::StampedTransform trans;
+	    geometry_msgs::TransformStamped ts;
+	    geometry_msgs::Point pt;
+	    try{
+	    	listener.lookupTransform(
+	    	    p.header.frame_id, "/robot_1/base_link",
+	    	    p.header.stamp-ros::Duration(0.05), trans);
+	    	tf::transformStampedTFToMsg(trans, ts);
+	    	pt.x = ts.transform.translation.x;
+	    	pt.y = ts.transform.translation.y;
+	    	pt.z = ts.transform.translation.z;
+	    	string_marker.points[1] = pt;
+	    }
+	    catch(tf::TransformException& ex){
+	    	ROS_DEBUG(
+	    	    "Error trying to lookupTransform: %s", ex.what());
+	    	return;
+	    }
+	    marker_pub.publish(string_marker);
+	    
 
 	    return;
 	}
