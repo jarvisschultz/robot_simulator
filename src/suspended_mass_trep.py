@@ -197,7 +197,8 @@ class MassSimulator:
             quat = qtrans.quaternion
             qtmp = np.array([quat.x, quat.y, quat.z, quat.w])
             R1 = tf.transformations.quaternion_matrix(qtmp)[:3,:3]
-            yvec = -1.0*R1[:,1]
+            yvec = -R1[:,1]
+            yvec[1] = (-yvec[0]*zvec[0]-yvec[2]*zvec[2])/zvec[1]
             xvec = np.cross(yvec, zvec)
             R = np.column_stack((xvec,yvec,zvec,np.array([0,0,0])))
             R = np.row_stack((R,np.array([0,0,0,1])))                             
