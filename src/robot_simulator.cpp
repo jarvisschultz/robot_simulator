@@ -403,8 +403,8 @@ public:
 	    drift << d*gen_normal(noise),d*gen_normal(noise);
 	    s += drift;
 
-	    s(0) = orig_len[0]-s(0);
-	    s(1) = orig_len[1]-s(1);
+	    s(0) += orig_len[0];
+	    s(1) += orig_len[1];
 
 	    if (s(0) < 0 || s(1) < 0)
 	    {
