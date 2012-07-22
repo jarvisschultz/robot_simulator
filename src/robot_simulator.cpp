@@ -63,7 +63,8 @@ class Simulator
 private:
     ros::NodeHandle n_;
     ros::Subscriber sub;
-    ros::Publisher pub, ser_pub, noise_free_pub, string_pub;
+    ros::Publisher pub, ser_pub, noise_free_pub;
+    ros::Publisher string_pub_noise_free, string_pub;
     ros::Timer timer, pub_time, watchdog;
     // nav_msgs::Odometry pose_odom;
     Eigen::Vector3d pose;
@@ -98,6 +99,8 @@ public:
 	pub = n_.advertise<nav_msgs::Odometry>("vo", 100);
 	noise_free_pub = n_.advertise<nav_msgs::Odometry>("vo_noise_free", 100);
 	string_pub = n_.advertise<geometry_msgs::Point>("string_lengths", 100);
+	string_pub_noise_free =
+	    n_.advertise<geometry_msgs::Point>("string_lengths_noise_free", 100);
 	
 	// create a publisher for telling other nodes what commands we
 	// sent to the robot
@@ -414,8 +417,13 @@ public:
 
 	    Lengths.x = s(0);
 	    Lengths.y = s(1);
-
 	    string_pub.publish(Lengths);
+
+	    s -= drift;
+	    Lengths.x = s(0);
+	    Lengths.y = s(1);
+	    string_pub_noise_free.publish(Lengths);
+	    
 	    
 	    return;
 	}
