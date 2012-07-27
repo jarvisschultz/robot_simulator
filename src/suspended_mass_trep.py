@@ -80,7 +80,7 @@ class MassSystem3D:
         system = trep.System()
 
         frames = [
-            tx('xm', name='x-mass'), [ 
+            tx('xm', name='x-mass'), [
                 ty('ym', name='y-mass'), [
                     tz('zm', name='z-mass', mass=self.mass) ]],
             ty(h0, name='robot_plane'), [
@@ -99,8 +99,8 @@ class MassSystem3D:
     def take_step(self, dt=DT, rho=()):
         self.mvi.step(self.mvi.t2+dt, (), rho)
         return
-    
-        
+
+
 
 ## Now let's define a class for ros to use.  We will define all
 ## subscriptions, publishers, and callbacks
@@ -111,7 +111,7 @@ class MassSimulator:
         ## define a subscriber and callback for the robot_simulator
         self.sub = rospy.Subscriber("vo_noise_free", Odometry, self.inputcb)
         self.str_sub = rospy.Subscriber("string_lengths", Point, self.stringcb)
-        
+
         ## define a publisher for the position of the mass:
         self.mass_pub = rospy.Publisher("mass_location", PointStamped)
 
@@ -162,7 +162,7 @@ class MassSimulator:
                 ptrans.point.z,
                 ptrans.point.x,
                 ptrans.point.z,
-                h0 ]                
+                h0 ]
             self.sys.reset_integration(state=q)
             self.last_time = ptrans.header.stamp
             self.initialized_flag = True
@@ -173,8 +173,8 @@ class MassSimulator:
             operating = rospy.get_param("/operating_condition")
         else:
             return
-        
-        
+
+
 
         ## if we are not running, just reset the parameter:
         if operating in [0,1,3,4]:
@@ -207,18 +207,24 @@ class MassSimulator:
                 fr = rospy.names.canonicalize_name(ns+fr)
 
             zvec = np.array([q[0]-ptrans.point.x, q[1]-ptrans.point.y, q[2]-ptrans.point.z])
-            qtmp = qtrans.quaternion
-            q1 = np.array([qtmp.x, qtmp.y, qtmp.z, qtmp.w])
-            q2 = tf.transformations.quaternion_from_euler(np.pi, 0, 0)
-            quat = tf.transformations.quaternion_multiply(q1,q2)
+            zvec = zvec/np.linalg.norm(zvec)
+            quat = qtrans.quaternion
+            qtmp = np.array([quat.x, quat.y, quat.z, quat.w])
+            R1 = tf.transformations.quaternion_matrix(qtmp)[:3,:3]
+            yvec = -R1[:,1]
+            yvec[1] = (-yvec[0]*zvec[0]-yvec[2]*zvec[2])/zvec[1]
+            xvec = np.cross(yvec, zvec)
+            R = np.column_stack((xvec,yvec,zvec,np.array([0,0,0])))
+            R = np.row_stack((R,np.array([0,0,0,1])))
+            quat = tuple(tf.transformations.quaternion_from_matrix(R).tolist())
             self.br.sendTransform((new_point.point.x, new_point.point.y, new_point.point.z),
                                   quat,
                                   new_point.header.stamp,
                                   fr,
                                   "/optimization_frame")
         return
-        
-        
+
+
 
 def main():
     """
@@ -236,8 +242,3 @@ def main():
 
 if __name__=='__main__':
     main()
-        
-        
-                
-        
-        
