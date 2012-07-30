@@ -1,4 +1,24 @@
 #!/usr/bin/env python
+"""
+Jarvis Schultz
+July 2012
+
+This program is a quick first attempt at integrating trep with ROS.  I
+will define a trep system that is basically a suspended mass hanging
+from a controllable point in 3D space.  The length of the "string"
+connected is also controllable.  I have one callback that subsribes to
+a nav_msgs::Odometry message that indicates the location of the
+kinematic variables 'xr' and 'zr'.  I use an odometry message because
+I use a simulator of a differential drive robot to actually publish
+this topic.  I have another callback that subscribes to a
+geometry_msgs::Point that sets the length of the string; 'r'.  In my
+application the same robot simulator also publishes this topic.
+
+Everytime the odometry callback is called, we use trep to step the
+variational integrator forward in time, and we then publish the
+location of the dynamic variables as a PointStamped.
+"""
+
 ## define all imports:
 import roslib; roslib.load_manifest('robot_simulator')
 import rospy
@@ -206,14 +226,23 @@ class MassSimulator:
             if len(ns) > 1:
                 fr = rospy.names.canonicalize_name(ns+fr)
 
+            # here we are going to do a bunch of geometry math to
+            # ensure that the orientation of the frame that we are
+            # placing at the mass location looks "nice"
+
+            # zvec points from robot to the string
             zvec = np.array([q[0]-ptrans.point.x, q[1]-ptrans.point.y, q[2]-ptrans.point.z])
             zvec = zvec/np.linalg.norm(zvec)
+            # get transform from incoming header frame to the optimization frame
             quat = qtrans.quaternion
             qtmp = np.array([quat.x, quat.y, quat.z, quat.w])
+            # convert to SO(3), and extract the y-vector for the frame
             R1 = tf.transformations.quaternion_matrix(qtmp)[:3,:3]
             yvec = -R1[:,1]
             yvec[1] = (-yvec[0]*zvec[0]-yvec[2]*zvec[2])/zvec[1]
+            # x vector is a cross of y and z
             xvec = np.cross(yvec, zvec)
+            # build rotation matrix and send transform
             R = np.column_stack((xvec,yvec,zvec,np.array([0,0,0])))
             R = np.row_stack((R,np.array([0,0,0,1])))
             quat = tuple(tf.transformations.quaternion_from_matrix(R).tolist())
