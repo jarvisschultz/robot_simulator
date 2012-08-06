@@ -37,6 +37,7 @@
 #include "boost/generator_iterator.hpp"
 
 #include "puppeteer_msgs/RobotCommands.h"
+#include "puppeteer_msgs/FullRobotState.h"
 
 
 
@@ -65,6 +66,7 @@ private:
     ros::Subscriber sub;
     ros::Publisher pub, ser_pub, noise_free_pub;
     ros::Publisher string_pub_noise_free, string_pub;
+    ros::Publisher state_pub, state_pub_noise_free;
     ros::Timer timer, pub_time, watchdog;
     // nav_msgs::Odometry pose_odom;
     Eigen::Vector3d pose;
@@ -100,11 +102,18 @@ public:
 	noise_free_pub = n_.advertise<nav_msgs::Odometry>("vo_noise_free", 100);
 	string_pub = n_.advertise<geometry_msgs::Point>("string_lengths", 100);
 	string_pub_noise_free =
-	    n_.advertise<geometry_msgs::Point>("string_lengths_noise_free", 100);
+	    n_.advertise<geometry_msgs::Point>("string_lengths_noise_free",100);
 	
 	// create a publisher for telling other nodes what commands we
 	// sent to the robot
-	ser_pub = n_.advertise<geometry_msgs::PointStamped> ("serviced_values", 100);
+	ser_pub = n_.advertise<geometry_msgs::PointStamped>
+	    ("serviced_values", 100);
+
+	// final set of publishers for sending out the complete robot state:
+	state_pub = n_.advertise<puppeteer_msgs::FullRobotState>
+	    ("robot_state", 100);
+	state_pub_noise_free = n_.advertise<puppeteer_msgs::FullRobotState>
+	    ("robot_state_noise_free", 100);	    
 	
 	// define a publisher for sending out the current pose of the robot:
 	if (ros::param::has("robot_index"))	
