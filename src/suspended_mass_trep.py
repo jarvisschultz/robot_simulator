@@ -26,6 +26,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PointStamped
 from geometry_msgs.msg import QuaternionStamped
 from geometry_msgs.msg import Point
+from puppeteer_msgs.msg import FullRobotState
 import trep
 from trep import tx, ty, tz, rx, ry, rz
 from math import sin, cos
@@ -129,8 +130,9 @@ class MassSimulator:
         rospy.loginfo("Starting mass_simulator node!")
 
         ## define a subscriber and callback for the robot_simulator
-        self.sub = rospy.Subscriber("vo_noise_free", Odometry, self.inputcb)
-        self.str_sub = rospy.Subscriber("string_lengths", Point, self.stringcb)
+        # self.sub = rospy.Subscriber("vo_noise_free", Odometry, self.inputcb)
+        # self.str_sub = rospy.Subscriber("string_lengths", Point, self.stringcb)
+        self.sub = rospy.Subscriber("robot_state", FullRobotState, self.inputcb)
 
         ## define a publisher for the position of the mass:
         self.mass_pub = rospy.Publisher("mass_location", PointStamped)
@@ -146,26 +148,25 @@ class MassSimulator:
 
         ## set base time
         self.last_time = rospy.rostime.get_rostime()
-
         self.len = h0
 
         return
 
-    def stringcb(self, data):
-        rospy.logdebug("string length callback triggered")
-        self.len = data.x
-        return
+    # def stringcb(self, data):
+    #     rospy.logdebug("string length callback triggered")
+    #     self.len = data.x
+    #     return
 
     def inputcb(self, data):
         rospy.logdebug("inputcb triggered")
         ## so the first thing that we need to do is get the location
         ## of the robot in the "/optimization_frame"
         p = PointStamped()
-        p.header = data.header
+        p.header = data.pose.header
         p.point = data.pose.pose.position
         quat = QuaternionStamped()
         quat.quaternion = data.pose.pose.orientation
-        quat.header = data.header
+        quat.header = p.header
         try:
             ptrans = self.listener.transformPoint("/optimization_frame", p)
             qtrans = self.listener.transformQuaternion("/optimization_frame", quat)
@@ -194,7 +195,8 @@ class MassSimulator:
         else:
             return
 
-
+        # set string length
+        self.len = data.left;
 
         ## if we are not running, just reset the parameter:
         if operating in [0,1,3,4]:
