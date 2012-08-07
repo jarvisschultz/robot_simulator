@@ -22,6 +22,7 @@ location of the dynamic variables as a PointStamped.
 ## define all imports:
 import roslib; roslib.load_manifest('robot_simulator')
 import rospy
+import tf
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PointStamped
 from geometry_msgs.msg import QuaternionStamped
@@ -33,7 +34,6 @@ from math import sin, cos
 from math import pi as mpi
 import numpy as np
 import sys
-import tf
 import scipy as sp
 
 ## define some global constants:
@@ -152,11 +152,34 @@ class MassSimulator:
 
     def inputcb(self, data):
         rospy.logdebug("inputcb triggered")
+
+        ## let's try and get the transform from the
+        ## base_footprint_kinect frame out to the string position
+        try:
+            (off, rot) = self.listener.lookupTransform("/robot_1/base_link",
+                                                       "/robot_1/left_string",
+                                                       rospy.Time())
+            tmp = PointStamped()
+            tmp.header = data.pose.header
+            tmp.header.stamp = self.listener.getLatestCommonTime("/robot_1/base_link",
+                                                                 "/optimization_frame")
+            tmp.header.frame_id = "/robot_1/base_link"
+            tmp.point.x = off[0]
+            tmp.point.y = off[1]
+            tmp.point.z = off[2]
+            offtrans = self.listener.transformPoint("/optimization_frame", tmp)
+        except (tf.Exception):
+            rospy.loginfo("tf could not get string offset!")
+            return
+
         ## so the first thing that we need to do is get the location
         ## of the robot in the "/optimization_frame"
         p = PointStamped()
         p.header = data.pose.header
         p.point = data.pose.pose.position
+        # p.point.x -= offtrans[0]
+        # p.point.y -= offtrans[1]
+        # p.point.z -= offtrans[2]
         quat = QuaternionStamped()
         quat.quaternion = data.pose.pose.orientation
         quat.header = p.header
@@ -166,6 +189,9 @@ class MassSimulator:
         except (tf.Exception):
             rospy.loginfo("tf exception caught !")
             return
+        ptrans.point.x -= offtrans.point.x
+        ptrans.point.y -= offtrans.point.y
+        ptrans.point.z -= offtrans.point.z
 
         ## if we have not initialized the VI, let's do it, otherwise,
         ## let's integrate

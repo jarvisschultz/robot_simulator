@@ -89,10 +89,10 @@ public:
 	    try{
 		std::string err;
 		ros::Time trans_time;
-		listener.getLatestCommonTime(p.header.frame_id, "base_link",
+		listener.getLatestCommonTime(p.header.frame_id, "left_string",
 					     trans_time, &err);
 		listener.lookupTransform(
-	    	    p.header.frame_id, "base_link",
+	    	    p.header.frame_id, "left_string",
 	    	    trans_time, trans);
 	    	tf::transformStampedTFToMsg(trans, ts);
 	    	pt.x = ts.transform.translation.x;
