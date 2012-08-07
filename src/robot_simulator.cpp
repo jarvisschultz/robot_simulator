@@ -76,6 +76,7 @@ private:
     tf::TransformBroadcaster br;
     bool timeout;
     double *orig_len;
+    geometry_msgs::Point Lengths, Lengths_nf;
     
 
 public:
@@ -187,7 +188,7 @@ public:
 	    c += drift;
 
 	    // build and publish the odometry message:
-	    nav_msgs::Odometry odom;
+	    nav_msgs::Odometry odom, odom_nf;
 	    std::stringstream ss;
 	    ss << "base_footprint_kinect";
 	    
@@ -208,14 +209,17 @@ public:
 
 	    // now publish the noise-free version:
 	    c = pose;
-	    odom.pose.pose.position.x = c(0);
-	    odom.pose.pose.position.y = -c(1);
-	    odom.pose.pose.position.z = 0;
+	    odom_nf.header.stamp = odom.header.stamp;
+	    odom_nf.header.frame_id = odom.header.frame_id;
+	    odom_nf.child_frame_id = odom.child_frame_id;
+	    odom_nf.pose.pose.position.x = c(0);
+	    odom_nf.pose.pose.position.y = -c(1);
+	    odom_nf.pose.pose.position.z = 0;
 	    theta = -c(2);
 	    quat =
 		tf::createQuaternionMsgFromYaw(angles::normalize_angle(theta));
-	    odom.pose.pose.orientation = quat;
-	    noise_free_pub.publish(odom);
+	    odom_nf.pose.pose.orientation = quat;
+	    noise_free_pub.publish(odom_nf);
 	    
 	    // now let's send out the corresponding transform as well
 	    geometry_msgs::TransformStamped trans;
@@ -238,6 +242,9 @@ public:
 
 	    // now we can process and send the message for the string lengths:
 	    send_string_states(d);
+
+	    // send complete robot states
+	    send_robot_states(odom, odom_nf);
 
 	    return;
 	}
@@ -409,7 +416,6 @@ public:
 	    static boost::variate_generator<boost::mt19937, boost::normal_distribution<> >
 		noise(boost::mt19937(time(0)),
 		      boost::normal_distribution<>());
-	    geometry_msgs::Point Lengths;
 	    Eigen::Vector2d s = strings;
 	    Eigen::Vector2d drift;
 	    drift << d*gen_normal(noise),d*gen_normal(noise);
@@ -429,13 +435,34 @@ public:
 	    string_pub.publish(Lengths);
 
 	    s -= drift;
-	    Lengths.x = s(0);
-	    Lengths.y = s(1);
-	    string_pub_noise_free.publish(Lengths);
-	    
+	    Lengths_nf.x = s(0);
+	    Lengths_nf.y = s(1);
+	    string_pub_noise_free.publish(Lengths_nf);
 	    
 	    return;
 	}
+
+    // this function is used for sending the complete state of the
+    // robot as a puppeteer_msgs/FullRobotState message in both a
+    // noisy, and noise free version.
+    void send_robot_states(nav_msgs::Odometry o, nav_msgs::Odometry o_nf)
+	{
+	    puppeteer_msgs::FullRobotState st;
+	    st.pose.header = o.header;
+	    st.pose.pose = o.pose.pose;
+	    st.left = Lengths.x;
+	    st.right = Lengths.y;
+	    state_pub.publish(st);
+
+	    st.pose.header = o_nf.header;
+	    st.pose.pose = o_nf.pose.pose;
+	    st.left = Lengths_nf.x;
+	    st.right = Lengths_nf.y;
+	    state_pub_noise_free.publish(st);
+	    
+	    return;
+	}
+    
 }; // END Simulator class
 
 
