@@ -130,8 +130,6 @@ class MassSimulator:
         rospy.loginfo("Starting mass_simulator node!")
 
         ## define a subscriber and callback for the robot_simulator
-        # self.sub = rospy.Subscriber("vo_noise_free", Odometry, self.inputcb)
-        # self.str_sub = rospy.Subscriber("string_lengths", Point, self.stringcb)
         self.sub = rospy.Subscriber("robot_state", FullRobotState, self.inputcb)
 
         ## define a publisher for the position of the mass:
@@ -151,11 +149,6 @@ class MassSimulator:
         self.len = h0
 
         return
-
-    # def stringcb(self, data):
-    #     rospy.logdebug("string length callback triggered")
-    #     self.len = data.x
-    #     return
 
     def inputcb(self, data):
         rospy.logdebug("inputcb triggered")
