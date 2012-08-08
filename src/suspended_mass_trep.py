@@ -42,6 +42,53 @@ g = 9.81 ## m/s^2
 h0 = 1 ## default height of robot in m
 DT = 1/30.0 ## nominal dt for the system
 
+
+## define some miscellaneous geometry helper functions
+def to_se3(R,p):
+    """
+    This function takes in a vector and a rotation matrix, and returns
+    an element of SE(3) as a 4x4 numpy array
+    """
+    pt = np.ravel(p)
+    if np.size(pt) != 3:
+        print "Wrong size vector when converting to SE(3)"
+        return 1
+    elif R.shape != (3,3):
+        print "Wrong size rotation matrix when converting to SE(3)"
+        return 1
+    else:
+        return np.vstack((np.hstack((R,np.array([pt]).T)),np.array([0,0,0,1])))
+
+
+def hat(w):
+    """
+    This function implements the 3D 'hat' operator
+    """
+    wt = np.ravel(w)
+    return np.array([[0,-wt[2],wt[1]],
+            [wt[2],0,-wt[0]],
+            [-wt[1],wt[0],0]])
+
+def quat_to_rot(quat):
+    """
+    converts a quaternion of form [w,x,y,z] to a 3x3 element of
+    SO(3) (represented as a numpy array)
+    """
+    quat = np.array(quat)
+    q = np.ravel(quat)
+    if np.size(q) != 4:
+        print "Invalid quaternion passed to quat_to_rot()"
+        return 1
+    th = 2*np.arccos(q[0])
+    if th == 0:
+        w = np.array([0,0,0])
+    else:
+        w = q[1:]/np.sin(th/2.0)
+    R = np.eye(3)+hat(w)*sin(th)+np.dot(hat(w),hat(w))*(1-cos(th))
+    return R
+
+
+
 ## define a class for simulating the system.
 class MassSystem3D:
     """
@@ -153,33 +200,37 @@ class MassSimulator:
     def inputcb(self, data):
         rospy.logdebug("inputcb triggered")
 
-        ## let's try and get the transform from the
-        ## base_footprint_kinect frame out to the string position
-        try:
-            (off, rot) = self.listener.lookupTransform("/robot_1/base_link",
-                                                       "/robot_1/left_string",
-                                                       rospy.Time())
-            tmp = PointStamped()
-            tmp.header = data.pose.header
-            tmp.header.stamp = self.listener.getLatestCommonTime("/robot_1/base_link",
-                                                                 "/optimization_frame")
-            tmp.header.frame_id = "/robot_1/base_link"
-            tmp.point.x = off[0]
-            tmp.point.y = off[1]
-            tmp.point.z = off[2]
-            offtrans = self.listener.transformPoint("/optimization_frame", tmp)
-        except (tf.Exception):
-            rospy.loginfo("tf could not get string offset!")
-            return
+        # translation from base_link to left string expressed in the
+        # base_link frame:
+        vb = np.array([[-0.0102, 0.0391, 0.086, 0]]).T
+        gbs = np.array([[1, 0, 0, vb[0,0]],
+                       [0, 0, -1, vb[1,0]],
+                       [0, 1, 0, vb[2,0]],
+                       [0, 0, 0, 1]])
+        gsb = np.linalg.inv(gbs)
+
+        # map to base stuff:
+        pbm = np.array([[data.pose.pose.position.x,
+                         data.pose.pose.position.y,
+                         data.pose.pose.position.z]]).T
+        qbm = np.array([[data.pose.pose.orientation.w,
+                         data.pose.pose.orientation.x,
+                         data.pose.pose.orientation.y,
+                         data.pose.pose.orientation.z]]).T
+        Rbm = quat_to_rot(qbm)
+        gbm = to_se3(Rbm,pbm)
+        gmb = np.linalg.inv(gbm)
+        vm = np.dot(gmb,np.dot(gbs,np.dot(gsb,vb)))
+        vm = np.ravel(vm)[0:3]
 
         ## so the first thing that we need to do is get the location
         ## of the robot in the "/optimization_frame"
         p = PointStamped()
         p.header = data.pose.header
         p.point = data.pose.pose.position
-        # p.point.x -= offtrans[0]
-        # p.point.y -= offtrans[1]
-        # p.point.z -= offtrans[2]
+        p.point.x -= vm[0]
+        p.point.y -= vm[1]
+        p.point.z -= vm[2]
         quat = QuaternionStamped()
         quat.quaternion = data.pose.pose.orientation
         quat.header = p.header
@@ -189,20 +240,17 @@ class MassSimulator:
         except (tf.Exception):
             rospy.loginfo("tf exception caught !")
             return
-        ptrans.point.x -= offtrans.point.x
-        ptrans.point.y -= offtrans.point.y
-        ptrans.point.z -= offtrans.point.z
 
         ## if we have not initialized the VI, let's do it, otherwise,
         ## let's integrate
         if not self.initialized_flag:
             q = [
                 ptrans.point.x,
-                ptrans.point.y-h0,
+                ptrans.point.y-h0-vb[1,0],
                 ptrans.point.z,
                 ptrans.point.x,
                 ptrans.point.z,
-                h0 ]
+                h0-vb[1,0] ]
             self.sys.reset_integration(state=q)
             self.last_time = ptrans.header.stamp
             self.initialized_flag = True
