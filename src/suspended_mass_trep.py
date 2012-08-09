@@ -202,7 +202,7 @@ class MassSimulator:
 
         # translation from base_link to left string expressed in the
         # base_link frame:
-        vb = np.array([[-0.0102, 0.0391, 0.086, 0]]).T
+        vb = np.array([[0.0102, 0.0391, 0.086, 0]]).T
         gbs = np.array([[1, 0, 0, vb[0,0]],
                        [0, 0, -1, vb[1,0]],
                        [0, 1, 0, vb[2,0]],
@@ -246,11 +246,11 @@ class MassSimulator:
         if not self.initialized_flag:
             q = [
                 ptrans.point.x,
-                ptrans.point.y-h0-vb[1,0],
+                ptrans.point.y-h0,
                 ptrans.point.z,
                 ptrans.point.x,
                 ptrans.point.z,
-                h0-vb[1,0] ]
+                h0 ]
             self.sys.reset_integration(state=q)
             self.last_time = ptrans.header.stamp
             self.initialized_flag = True
