@@ -6,13 +6,10 @@ July 2012
 This program is a quick first attempt at integrating trep with ROS.  I
 will define a trep system that is basically a suspended mass hanging
 from a controllable point in 3D space.  The length of the "string"
-connected is also controllable.  I have one callback that subsribes to
-a nav_msgs::Odometry message that indicates the location of the
-kinematic variables 'xr' and 'zr'.  I use an odometry message because
-I use a simulator of a differential drive robot to actually publish
-this topic.  I have another callback that subscribes to a
-geometry_msgs::Point that sets the length of the string; 'r'.  In my
-application the same robot simulator also publishes this topic.
+connected is also controllable. There is one callback that subscribes
+to a message that contains the pose of the robot, and the lengths of
+both strings.  For now, I just assume that the left string is the one
+controlling the length of the string.
 
 Everytime the odometry callback is called, we use trep to step the
 variational integrator forward in time, and we then publish the
