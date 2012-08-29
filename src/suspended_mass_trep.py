@@ -25,6 +25,7 @@ from geometry_msgs.msg import PointStamped
 from geometry_msgs.msg import QuaternionStamped
 from geometry_msgs.msg import Point
 from puppeteer_msgs.msg import FullRobotState
+from puppeteer_msgs.msg import PlanarSystemConfig
 import trep
 from trep import tx, ty, tz, rx, ry, rz
 from math import sin, cos
@@ -179,6 +180,10 @@ class MassSimulator:
         ## define a publisher for the position of the mass:
         self.mass_pub = rospy.Publisher("mass_location", PointStamped)
 
+        ## define a publisher for publishing the 2D results of the
+        ## simulation
+        self.plan_pub = rospy.Publisher("meas_config", PlanarSystemConfig)
+
         ## define a transform listener for publishing the transforms
         ## to the location of the mass
         self.br = tf.TransformBroadcaster()
@@ -285,6 +290,13 @@ class MassSimulator:
             new_point.header.stamp = rospy.rostime.get_rostime()
             rospy.logdebug("Publishing mass location")
             self.mass_pub.publish(new_point)
+            ## we can also publish the planar results:
+            config = PlanarSystemConfig()
+            config.xm = q[0]
+            config.ym = q[1]
+            config.xr = rho[0]
+            config.r = rho[2]
+            self.plan_pub.publish(config)
 
             ## now we can send out the transform
             ns = rospy.get_namespace()
