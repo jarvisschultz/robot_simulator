@@ -56,6 +56,15 @@ h0 = 1 ## default height of robot in m
 DT = 1/30.0 ## nominal dt for the system
 
 
+# define a simple helper function for multiplying numpy arrays as
+# matrices
+def matmult(*x):
+  """
+  Shortcut for standard matrix multiplication.
+  matmult(A,B,C) returns A*B*C.
+  """
+  return reduce(np.dot, x)
+
 
 ## define a class for simulating the system.
 class MassSystem2D:
@@ -74,10 +83,8 @@ class MassSystem2D:
             self.sys.q = {
                 'xm' : q0[0],
                 'ym' : q0[1],
-                'zm' : q0[2],
-                'xr' : q0[3],
-                'zr' : q0[4],
-                'r' : q0[5],
+                'xr' : q0[2],
+                'r' : q0[3],
                 }
 
         self.sys.satisfy_constraints()
@@ -97,12 +104,10 @@ class MassSystem2D:
             self.q0 = state
         if self.q0:
             self.sys.q = {
-                'xm' : self.q0[0],
-                'ym' : self.q0[1],
-                'zm' : self.q0[2],
-                'xr' : self.q0[3],
-                'zr' : self.q0[4],
-                'r' : self.q0[5],
+                'xm' : q0[0],
+                'ym' : q0[1],
+                'xr' : q0[2],
+                'r' : q0[3],
                 }
         self.sys.satisfy_constraints()
         del self.mvi
@@ -117,17 +122,15 @@ class MassSystem2D:
 
         frames = [
             tx('xm', name='x-mass'), [
-                ty('ym', name='y-mass'), [
-                    tz('zm', name='z-mass', mass=self.mass) ]],
-            ty(h0, name='robot_plane'), [
-                tx('xr', name='x-robot', kinematic=True), [
-                    tz('zr', name='z-robot', kinematic=True) ]]]
+                ty('ym', name='y-mass', mass=ball_mass) ],
+            ty(1, name='robot_plane'), [
+                tx('xr', name='x-robot', kinematic=True) ]]
         system.import_frames(frames)
         trep.potentials.Gravity(system, (0, -g, 0))
         trep.forces.Damping(system, 0.05)
 
         # add string constraint as a kinematic configuration var
-        trep.constraints.Distance(system, 'z-mass', 'z-robot','r')
+        trep.constraints.Distance(system, 'y-mass', 'x-robot','r')
 
         return system
 
@@ -148,7 +151,15 @@ class Filter:
 
         return
 
+    def set_meas_cov(self, cov):
 
+        return
+
+    def set_model_cov(self, cov)
+
+        return
+
+    def 
 
 
 class System:
