@@ -33,20 +33,18 @@ NOTES:
 import roslib; roslib.load_manifest('robot_simulator')
 import rospy
 import tf
-# from nav_msgs.msg import Odometry
-# from geometry_msgs.msg import PointStamped
-# from geometry_msgs.msg import QuaternionStamped
-# from geometry_msgs.msg import Point
 from puppeteer_msgs.msg import FullRobotState
 from puppeteer_msgs.msg import PlanarSystemConfig
 from puppeteer_msgs.msg import RobotCommands
 import trep
 from trep import tx, ty, tz, rx, ry, rz
+import trep.discopt as discopt
 from math import sin, cos
 from math import pi as mpi
 import numpy as np
 import sys
 import scipy as sp
+import os
 
 
 ## define some global constants:
@@ -71,7 +69,7 @@ class MassSystem2D:
     """
     Class for integrating system.  Includes many helper functions.
     """
-    def __init__(self, mass=BALL_MASS, q0=None):
+    def __init__(self, mass=BALL_MASS, q0=None, t=None):
         self.mass = mass
         self.q0 = q0
         self.sys = self.create_system()
@@ -89,8 +87,6 @@ class MassSystem2D:
 
         self.sys.satisfy_constraints()
         self.mvi = trep.MidpointVI(self.sys)
-        self.mvi.initialize_from_configs(0,self.sys.q,DT,self.sys.q)
-
         return
 
     def get_current_configuration(self):
@@ -99,21 +95,11 @@ class MassSystem2D:
     def get_current_time(self):
         return self.mvi.t2
 
-    def reset_integration(self, state=None):
-        if state:
-            self.q0 = state
-        if self.q0:
-            self.sys.q = {
-                'xm' : q0[0],
-                'ym' : q0[1],
-                'xr' : q0[2],
-                'r' : q0[3],
-                }
-        self.sys.satisfy_constraints()
-        del self.mvi
-        self.mvi = trep.MidpointVI(self.sys)
-        self.mvi.initialize_from_configs(0,self.q0,DT,self.q0)
-
+    # the following function is just for creating the DSystem object
+    # that we will use for integrating the system.
+    def create_dsys(self, t):
+        # now we can create a DSystem object:
+        self.dsys = discopt.DSystem(self.mvi, t)
         return
 
     def create_system(self):
@@ -122,7 +108,7 @@ class MassSystem2D:
 
         frames = [
             tx('xm', name='x-mass'), [
-                ty('ym', name='y-mass', mass=ball_mass) ],
+                ty('ym', name='y-mass', mass=BALL_MASS) ],
             ty(1, name='robot_plane'), [
                 tx('xr', name='x-robot', kinematic=True) ]]
         system.import_frames(frames)
@@ -134,10 +120,29 @@ class MassSystem2D:
 
         return system
 
-
     def take_step(self, dt=DT, rho=()):
         self.mvi.step(self.mvi.t2+dt, (), rho)
         return
+
+    # def reset_integration(self, state=None):
+    #     if state:
+    #         self.q0 = state
+    #     if self.q0:
+    #         self.sys.q = {
+    #             'xm' : q0[0],
+    #             'ym' : q0[1],
+    #             'xr' : q0[2],
+    #             'r' : q0[3],
+    #             }
+    #     self.sys.satisfy_constraints()
+    #     ## del self.mvi
+    #     ## self.mvi = trep.MidpointVI(self.sys)
+    #     ## self.mvi.initialize_from_configs(0,self.q0,DT,self.q0)
+    #     self.dsys.set(self.dsys.build_state(Q=self.sys.q),
+    #                   self.dsys.build_input(rho=self.q0[2:]),
+    #                   0)
+    #     return
+
 
 
 
@@ -155,11 +160,10 @@ class Filter:
 
         return
 
-    def set_model_cov(self, cov)
+    def set_model_cov(self, cov):
 
         return
 
-    def 
 
 
 class System:
@@ -171,6 +175,42 @@ class System:
     and contain any callbacks.
     """
     def __init__(self):
+        rospy.loginfo("Starting closed-loop controller...")
+        # first we must parse the CL args:
+        args = sys.argv
+        # find reference trajectory
+        abbreviations = {
+            '-f' : '--filename'
+            }
+        ## replace abbreviations with full name
+        for i in range(len(args)):
+            if args[i] in abbreviations:
+                args[i] = abbreviations[args[i]]
+        if '--filename' not in args:
+            # then we just exit
+            rospy.logerr("Must provide a filename!")
+            sys.exit(1)
+        else:
+            fname = args[args.index('--filename')+1]
+            if not os.path.isfile(fname):
+                rospy.logerr("Filename not found: ",fname)
+                sys.exit(1)
+
+        # now we can load in the traj:
+        self.system = MassSystem2D()
+        (self.tref, self.Qref, self.pref, self.vref, self.uref, self.rhoref) = \
+            trep.load_trajectory(fname, self.system.sys)
+        # now we can create the dsys object:
+        self.system.create_dsys(self.tref)
+        # combine reference trajectory into state and input references:
+        (self.Xref, self.Uref) = self.system.dsys.build_trajectory(
+            Q=self.Qref, p=self.pref, v=self.vref, u=self.uref, rho=self.rhoref)
+        # now we can initialize the variational integrator using the
+        # reference trajectory as our guide
+        self.system.dsys.set(self.Xref[0], self.Uref[0], 0)
+        rospy.loginfo("trep discopt system created and " \
+                      "variational integrator initialized")
+
 
         return
 
