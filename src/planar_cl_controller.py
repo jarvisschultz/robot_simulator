@@ -120,9 +120,9 @@ class MassSystem2D:
 
         return system
 
-    def take_step(self, dt=DT, rho=()):
-        self.mvi.step(self.mvi.t2+dt, (), rho)
-        return
+    # def take_step(self, dt=DT, rho=()):
+    #     self.mvi.step(self.mvi.t2+dt, (), rho)
+    #     return
 
     # def reset_integration(self, state=None):
     #     if state:
@@ -146,23 +146,23 @@ class MassSystem2D:
 
 
 
-class Filter:
-    """
-    This class is the base class for my EKF.  It must contain methods
-    for instantiating a filter, modifying covariances, updating the
-    filter, and returning any of the private filter parameters.
-    """
-    def __init__(self):
+# class Filter:
+#     """
+#     This class is the base class for my EKF.  It must contain methods
+#     for instantiating a filter, modifying covariances, updating the
+#     filter, and returning any of the private filter parameters.
+#     """
+#     def __init__(self):
 
-        return
+#         return
 
-    def set_meas_cov(self, cov):
+#     def set_meas_cov(self, cov):
 
-        return
+#         return
 
-    def set_model_cov(self, cov):
+#     def set_model_cov(self, cov):
 
-        return
+#         return
 
 
 
@@ -211,7 +211,24 @@ class System:
         rospy.loginfo("trep discopt system created and " \
                       "variational integrator initialized")
 
+        # Now we can linearize the trajectory, and find control gains:
+        # first we need the cost functions (let's start with identity)
+        def Qfunc(kf): return np.diag([1, 1, 1, 1, 1, 1, 1, 1])
+        def Rfunc(kf): return np.diag([1, 1])
+        (self.Kproj, self.Avec, self.Bvec) = self.system.dsys.calc_feedback_controller(
+            self.Xref, self.Uref, Q=Qfunc, R=Rfunc, return_linearization=True)
+        rospy.loginfo("Successfully found linearization and feedback law")
 
+        # now we can define our filter parameters:
+        self.meas_cov = np.diag((0.5,0.5,0.5,0.5,0.75,0.75,0.75,0.75)) # measurement covariance
+        self.proc_cov = np.diag((0.1,0.1,0.1,0.1,0.15,0.15,0.15,0.15)) # process covariance
+        self.est_cov = self.meas_cov # estimate covariance
+
+        # now we can define all callbacks, publishers, and subscribers:
+        self.meas_sub = rospy.Subscriber("meas_config", PlanarSystemConfig, self.meascb)
+        self.filt_pub = rospy.Publisher("filt_config", PlanarSystemConfig)
+        self.comm_pub = rospy.Publisher("serial_commands", RobotCommands)
+        
         return
 
 
