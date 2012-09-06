@@ -124,7 +124,7 @@ class MassSystem2D:
         return system
 
 
-    
+
 class System:
     """
     This class will be responsible for creating an instance of the
@@ -194,6 +194,20 @@ class System:
             self.robot_index = 0
             rospy.set_param("robot_index", self.robot_index)
 
+        # send the robot it's starting pose in the /optimization_frame
+        com = RobotCommands()
+        com.robot_index = self.robot_index
+        com.type = ord('a')
+        com.header.stamp = rospy.get_rostime()
+        com.header.frame_id = "/optimization_frame"
+        com.div = 4
+        com.x = self.Qref[0][2]
+        com.y = 0
+        com.th = 0
+        com.height_left = self.Qref[0][3]
+        com.height_right = 1
+        self.comm_pub.publish(com)
+
         # now let's initialize a bunch of variables that many of the
         # other methods in this class will need access to
         self.tbase = rospy.Time.from_sec(0)
@@ -209,6 +223,7 @@ class System:
         self.Xpred2 = np.zeros((self.system.dsys.nX, 1))
         self.Xest1 = np.zeros((self.system.dsys.nX, 1))
         self.Xest2 = np.zeros((self.system.dsys.nX, 1))
+        self.first_flag = True
 
         return
 
@@ -230,10 +245,10 @@ class System:
         self.u2 = self.Uref[self.k] + \
           matmult(self.Kproj[self.k], self.Xref[self.k]-self.Xest2)
         # now convert to a velocity and send out:
-        ucom = (u2-u1)/DT
+        ucom = (self.u2-self.u1)/DT
         com = RobotCommands()
         com.robot_index = self.robot_index
-        com.type = 'n'
+        com.type = ord('n')
         com.v_left = ucom[0]
         com.v_right = ucom[0]
         com.v_top = 0
@@ -247,7 +262,7 @@ class System:
     def stop_robot(self):
         com = RobotCommands()
         com.robot_index = self.robot_index
-        com.type = 'q'
+        com.type = ord('q')
         self.comm_pub.publish(com)
         return
 
@@ -315,10 +330,10 @@ class System:
         if (op != 2):
             # we are not running, so let's just keep running the
             # initializations and exiting
-            first_flag = True
+            self.first_flag = True
             return
 
-        if first_flag:
+        if self.first_flag:
             # this is the first run through the callback while in the
             # running state, so let's initialize all of the variables,
             # and then make sure to set the flag back to false at the
@@ -337,17 +352,17 @@ class System:
             self.Xpred2 = self.Xref[self.k]
             # for our initial estimate, let's just average the
             # prediction and the measurement
-            self.Xest2 = (self.Xmes2+self.Xpred2)/2.0
+            self.Xest2 = (self.Xmeas2+self.Xpred2)/2.0
             # now run our control law
             self.calc_send_controls()
             # send out nominal (feedforward) controls:
-            first_flag = False
+            self.first_flag = False
             return
 
         # let's increment our index:
         self.k += 1
         # do we need to exit?
-        if k >= len(self.tref):
+        if self.k >= len(self.tref):
             self.stop_robots()
             rospy.set_param("/operating_condition", 3)
             return
