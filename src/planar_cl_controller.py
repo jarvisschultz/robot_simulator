@@ -225,7 +225,7 @@ class System:
         # now we can define our filter parameters:
         self.meas_cov = np.diag((0.5,0.5,0.5,0.5,0.75,0.75,0.75,0.75)) # measurement covariance
         self.proc_cov = np.diag((0.1,0.1,0.1,0.1,0.15,0.15,0.15,0.15)) # process covariance
-        self.est_cov = self.meas_cov # estimate covariance
+        self.est_cov = copy.deepcopy(self.meas_cov) # estimate covariance
 
         # now we can define all callbacks, publishers, subscribers,
         # services, and parameters:
@@ -236,15 +236,15 @@ class System:
             self.robot_index = rospy.get_param("robot_index")
         else:
             self.robot_index = 0
-            rospy.set_param("robot_index")
+            rospy.set_param("robot_index", self.robot_index)
 
         # now let's initialize a bunch of variables that many of the
         # other methods in this class will need access to
         self.tbase = rospy.Time.from_sec(0)
         self.k = int(0)
         self.t1 = self.t2 = 0
-        self.u1 = np.zeros((self.systen.sys.nU, 1))
-        self.u2 =
+        self.u1 = np.zeros((self.system.sys.nQk, 1))
+        self.u2 = np.zeros((self.system.sys.nQk, 1))
         self.Qmeas1 = np.zeros((self.system.sys.nQ, 1))
         self.Qmeas2 = np.zeros((self.system.sys.nQ, 1))
         self.Xmeas1 = np.zeros((self.system.dsys.nX, 1))
@@ -276,7 +276,7 @@ class System:
         variables into the "1" variables.
         """
         self.t1 = copy.deepcopy(self.t2)
-        self.rho1 = copy.deepcopy(self.rho2)
+        self.u1 = copy.deepcopy(self.u2)
         self.Qmeas1 = copy.deepcopy(self.Qmeas2)
         self.Xmeas1 = copy.deepcopy(self.Xmeas2)
         self.Xpred1 = copy.deepcopy(self.Xpred2)
@@ -305,7 +305,62 @@ class System:
     def stop_robot(self):
         com = RobotCommands()
         com.robot_index = self.robot_index
-        
+        com.type = 'q'
+        self.comm_pub.publish(com)
+        return
+
+    def get_gen_mom(self):
+        """ Initialize a VI, and calculate the discrete Legendre
+        transform, then return the momenta array """
+        vi = trep.MidpointVI(self.system.sys)
+        vi.q1 = self.Qmeas1
+        vi.q2 = self.Qmeas2
+        vi.t1 = self.t1
+        vi.t2 = self.t2
+        vi.calc_p2()
+        return vi.p2
+
+    def get_kin_vel(self):
+        """ Find the finite difference velocities of the kinematic
+        configuration variables, and return the array """
+        qk = self.Qmeas2[2:]
+        qkm = self.Qmeas1[2:]
+        return ((qk-qkm)/(self.t2-self.t1))
+
+    def get_prediction(self):
+        """ Use the variational integrator to
+        step forward in time, and predict where we should be, and
+        return that array """
+        self.system.mvi.initialize_from_state(self.t1,
+                                              self.Xest1[0:4],
+                                              self.Xest1[4:6])
+        self.system.mvi.step(self.t2, u1=(), k2=self.u2)
+        v2 = (self.system.mvi.q2[2:]-self.system.mvi.q1[2:])/ \
+          (self.system.mvi.t2-self.system.mvi.t1)
+        tmp = np.hstack((self.system.mvi.q2,
+                         self.system.mvi.p2,
+                         v2))
+        return tmp
+
+    def update_filter(self):
+        """ Run the EKF equations to update the kalman filter, and
+        return the posterior mean and covariance """
+        # predict estimated covariance:
+        xkm1 = self.Xpred2
+        Fkm1 = self.Avec[self.k]
+        Pkm1 = matmult(Fkm1, self.est_cov, Fkmt.T) + self.proc_cov
+        # innovation:
+        yk = self.Xmeas2 - xkm1
+        # residual covariance:
+        Sk = Pkm1 + self.meas_cov
+        # Kalman gain:
+        Kk = matmult(Pkm1, np.linalg.inv(Sk))
+        # updated state estimate:
+        xkk = xkm1 + matmult(Kk, yk)
+        tmp = np.identity(self.system.sys.nQ)-Kk
+        Pkk = matmult(tmp, Pkm1)
+        return (xkk, Pkk)
+
 
     # define the callback function for the estimate out of the kinect
     def meascb(self, data):
@@ -327,7 +382,7 @@ class System:
             # and then make sure to set the flag back to false at the
             # end of the callback
             self.tbase = data.header.stamp
-            self.t2 = self.tbase.to_sec()
+            self.t2 = 0.0
             self.k = 0
             # fill out X2 stuff:
             self.Qmeas2 = np.array([data.xm, data.ym, data.xr, data.r])
@@ -350,13 +405,34 @@ class System:
         # let's increment our index:
         self.k += 1
         # do we need to exit?
-
+        if k >= len(self.tref):
+            self.stop_robots()
+            rospy.set_param("/operating_condition", 3)
+            return
         # copy X2 stuff to X1:
-
+        self.copy_two_to_one()
         # calculate and fill out new X2 stuff:
-
+        self.t2 = (data.header.stamp-self.tbase).to_sec()
+        self.Qmeas2 = np.array([data.xm, data.ym, data.xr, data.r])
+        ptmp = self.get_gen_mom()
+        vtmp = self.get_kin_vel()
+        self.Xmeas2 = np.hstack((self.Qmeas2, ptmp, vtmp))
+        # now we need to make our prediction:
+        self.Xpred2 = self.get_prediction()
+        # Update the EKF, and get the posterior mean:
+        (self.Xest2, self.est_cov) = self.update_filter()
         # run control law and send controls:
+        self.calc_send_controls()
 
+        # publish the estimated pose:
+        qest = PlanarSystemConfig()
+        qest.header.stamp = data.header.stamp
+        qest.header.frame_id = data.header.frame_id
+        qest.xm = self.Xest2[0]
+        qest.ym = self.Xest2[1]
+        qest.xr = self.Xest2[2]
+        qest.r  = self.Xest2[3]
+        self.filt_pub.publish(qest)
 
         return
 
