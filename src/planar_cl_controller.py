@@ -123,52 +123,8 @@ class MassSystem2D:
 
         return system
 
-    # def take_step(self, dt=DT, rho=()):
-    #     self.mvi.step(self.mvi.t2+dt, (), rho)
-    #     return
 
-    # def reset_integration(self, state=None):
-    #     if state:
-    #         self.q0 = state
-    #     if self.q0:
-    #         self.sys.q = {
-    #             'xm' : q0[0],
-    #             'ym' : q0[1],
-    #             'xr' : q0[2],
-    #             'r' : q0[3],
-    #             }
-    #     self.sys.satisfy_constraints()
-    #     ## del self.mvi
-    #     ## self.mvi = trep.MidpointVI(self.sys)
-    #     ## self.mvi.initialize_from_configs(0,self.q0,DT,self.q0)
-    #     self.dsys.set(self.dsys.build_state(Q=self.sys.q),
-    #                   self.dsys.build_input(rho=self.q0[2:]),
-    #                   0)
-    #     return
-
-
-
-
-# class Filter:
-#     """
-#     This class is the base class for my EKF.  It must contain methods
-#     for instantiating a filter, modifying covariances, updating the
-#     filter, and returning any of the private filter parameters.
-#     """
-#     def __init__(self):
-
-#         return
-
-#     def set_meas_cov(self, cov):
-
-#         return
-
-#     def set_model_cov(self, cov):
-
-#         return
-
-
-
+    
 class System:
     """
     This class will be responsible for creating an instance of the
@@ -253,22 +209,8 @@ class System:
         self.Xpred2 = np.zeros((self.system.dsys.nX, 1))
         self.Xest1 = np.zeros((self.system.dsys.nX, 1))
         self.Xest2 = np.zeros((self.system.dsys.nX, 1))
-        # self.K1 = np.zeros((self.system.dsys.nU, self.system.dsys.nX))
-        # self.K2 = np.zeros((self.system.dsys.nU, self.system.dsys.nX))
-        # self.A1 = np.zeros((self.system.dsys.nX, self.system.dsys.nX))
-        # self.A2 = np.zeros((self.system.dsys.nX, self.system.dsys.nX))
-        # self.B1 = np.zeros((self.system.dsys.nX, self.system.dsys.nX))
-        # self.B2 = np.zeros((self.system.dsys.nX, self.system.dsys.nU))
 
         return
-
-
-    # def set_predefined_vars(self):
-    #     """
-    #     This function sets the status of all of the "1/2" variables
-    #     defined in init by just passing it an index for the location
-    #     in all of the arrays.
-    #     """
 
     def copy_two_to_one(self):
         """
@@ -439,7 +381,7 @@ class System:
 
 def main():
     """
-    Run the main loop, by instatiating a Controller class, and then
+    Run the main loop, by instatiating a System class, and then
     calling ros.spin
     """
     rospy.init_node('cl_control', log_level=rospy.INFO)
