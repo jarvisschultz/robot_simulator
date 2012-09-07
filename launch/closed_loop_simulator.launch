@@ -16,9 +16,9 @@
       <arg name="rn" value="$(arg rn)" />
     </include>
 
-    <param name="/simulator_noise" value="0.0" />
+    <param name="/simulator_noise" value="0.01" />
     <node pkg="robot_simulator" name="mass_simulator"
-	  type="suspended_mass_trep.py" 
+	  type="suspended_mass_trep.py"
           output="screen" respawn="true" />
     <node pkg="robot_simulator" name="marker" type="mass_marker" 
           output="screen" respawn="true" />
@@ -26,7 +26,7 @@
     <!-- now I want to start up the controller/ filter, and the
 	 coordinator simulator -->
     <node pkg="robot_simulator" name="controller"
-	  type="planar_cl_controller.py" output="screen" respawn="false"
+	  type="planar_cl_controller.py" output="screen" respawn="true"
 	  args="-f $(arg dir)$(arg file)"/>
   </group>
 

@@ -135,8 +135,6 @@ class MassSystem3D:
                 'r' : self.q0[5],
                 }
         self.sys.satisfy_constraints()
-        del self.mvi
-        self.mvi = trep.MidpointVI(self.sys)
         self.mvi.initialize_from_configs(0,self.q0,DT,self.q0)
 
         return
@@ -201,7 +199,7 @@ class MassSimulator:
         if rospy.has_param("/simulator_noise"):
             self.noise = rospy.get_param("/simulator_noise")
         else:
-            self.noise = 0.0    
+            self.noise = 0.0
 
         return
 
@@ -238,7 +236,7 @@ class MassSimulator:
         p.point = data.pose.pose.position
         p.point.x -= vm[0]
         p.point.y -= vm[1]
-        p.point.z -= vm[2] 
+        p.point.z -= vm[2]
         quat = QuaternionStamped()
         quat.quaternion = data.pose.pose.orientation
         quat.header = p.header
@@ -264,23 +262,24 @@ class MassSimulator:
             self.initialized_flag = True
             return
 
-        ## get operating_condition:
+        # get operating_condition:
         if rospy.has_param("/operating_condition"):
             operating = rospy.get_param("/operating_condition")
         else:
             return
+            
 
         # set string length
         self.len = data.left;
 
         ## if we are not running, just reset the parameter:
-        if operating in [0,1,3,4]:
+        if operating is not 2:
             self.initialized_flag = False
             return
         else:
             self.initialized_flag = True
-            ## if we are in the "running mode", let's integrate the VI,
-            ## and publish the results:
+            # if we are in the "running mode", let's integrate the VI,
+            # and publish the results:
             rho = [ptrans.point.x, ptrans.point.z, self.len]
             dt = (ptrans.header.stamp - self.last_time).to_sec()
             self.last_time = ptrans.header.stamp
@@ -288,6 +287,7 @@ class MassSimulator:
             self.sys.take_step(dt, rho)
             ## now we can get the state of the system
             q = self.sys.get_current_configuration()
+
             ## now add the appropriate amount of noise:
             q[0] += self.noise*np.random.normal()
             new_point = PointStamped()
@@ -298,6 +298,7 @@ class MassSimulator:
             new_point.header.stamp = rospy.rostime.get_rostime()
             rospy.logdebug("Publishing mass location")
             self.mass_pub.publish(new_point)
+
             ## we can also publish the planar results:
             config = PlanarSystemConfig()
             config.header.frame_id = "/optimization_frame"
@@ -339,6 +340,9 @@ class MassSimulator:
                                   new_point.header.stamp,
                                   fr,
                                   "/optimization_frame")
+
+
+
         return
 
 

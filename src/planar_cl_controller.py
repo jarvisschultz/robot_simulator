@@ -26,7 +26,7 @@ PUBLISHERS:
     - Path (mass_ref_path)
 
 SERVICES:
-    - Can reply with anything from the read-in trajectory (MUST ADD)
+    - PlanarSystemService (get_ref_config)
 
 NOTES:
     - Let's assume that the configurations that are received in
@@ -184,7 +184,7 @@ class System:
         rospy.loginfo("Successfully found linearization and feedback law")
 
         # now we can define our filter parameters:
-        self.meas_cov = np.diag((0.5,0.5,0.5,0.5,0.75,0.75,0.75,0.75)) # measurement covariance
+        self.meas_cov = 2*np.diag((0.5,0.5,0.5,0.5,0.75,0.75,0.75,0.75)) # measurement covariance
         self.proc_cov = np.diag((0.1,0.1,0.1,0.1,0.15,0.15,0.15,0.15)) # process covariance
         self.est_cov = copy.deepcopy(self.meas_cov) # estimate covariance
 
@@ -304,13 +304,13 @@ class System:
     def get_gen_mom(self):
         """ Initialize a VI, and calculate the discrete Legendre
         transform, then return the momenta array """
-        vi = trep.MidpointVI(self.system.sys)
-        vi.q1 = self.Qmeas1
-        vi.q2 = self.Qmeas2
-        vi.t1 = self.t1
-        vi.t2 = self.t2
-        vi.calc_p2()
-        return vi.p2
+        self.system.mvi.q1 = self.Qmeas1
+        self.system.mvi.q2 = self.Qmeas2
+        self.system.mvi.t1 = self.t1
+        self.system.mvi.t2 = self.t2
+        self.system.mvi.calc_p2()
+        p2 = self.system.mvi.p2
+        return p2
 
     def get_kin_vel(self):
         """ Find the finite difference velocities of the kinematic
