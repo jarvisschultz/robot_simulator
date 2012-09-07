@@ -21,7 +21,9 @@ SUBSCRIPTIONS:
 
 PUBLISHERS:
     - PlanarSystemConfig (filt_config)
+    - PlanarSystemConfig (ref_config)
     - RobotCommands     (serial_commands)
+    - Path (mass_ref_path)
 
 SERVICES:
     - Can reply with anything from the read-in trajectory (MUST ADD)
@@ -39,6 +41,8 @@ import tf
 from puppeteer_msgs.msg import FullRobotState
 from puppeteer_msgs.msg import PlanarSystemConfig
 from puppeteer_msgs.msg import RobotCommands
+from nav_msgs.msg import Path
+from geometry_msgs.msg import PoseStamped
 import trep
 from trep import tx, ty, tz, rx, ry, rz
 import trep.discopt as discopt
@@ -49,6 +53,7 @@ import sys
 import scipy as sp
 import os
 import copy
+import time
 
 ## define some global constants:
 BALL_MASS = 0.1244 ## kg
@@ -79,7 +84,7 @@ class MassSystem2D:
         ## set initial configuration variables
         if q0:
             if len(q0) < sys.nQ:
-                print "Invalid number of initial conditions"
+                rospy.logerr("Invalid number of initial conditions")
                 sys.exit()
             self.sys.q = {
                 'xm' : q0[0],
@@ -187,26 +192,23 @@ class System:
         # services, and parameters:
         self.meas_sub = rospy.Subscriber("meas_config", PlanarSystemConfig, self.meascb)
         self.filt_pub = rospy.Publisher("filt_config", PlanarSystemConfig)
+        self.ref_pub = rospy.Publisher("ref_config", PlanarSystemConfig)
         self.comm_pub = rospy.Publisher("serial_commands", RobotCommands)
+        self.path_pub = rospy.Publisher("mass_ref_path", Path)
+        self.ref_pub = rospy.Publisher("ref_config", PlanarSystemConfig)
         if rospy.has_param("robot_index"):
             self.robot_index = rospy.get_param("robot_index")
         else:
             self.robot_index = 0
             rospy.set_param("robot_index", self.robot_index)
+        rospy.set_param("/operating_condition", 0)
+
 
         # send the robot it's starting pose in the /optimization_frame
-        com = RobotCommands()
-        com.robot_index = self.robot_index
-        com.type = ord('a')
-        com.header.stamp = rospy.get_rostime()
-        com.header.frame_id = "/optimization_frame"
-        com.div = 4
-        com.x = self.Qref[0][2]
-        com.y = 0
-        com.th = 0
-        com.height_left = self.Qref[0][3]
-        com.height_right = 1
-        self.comm_pub.publish(com)
+        rospy.logwarn("Waiting for three seconds!!!")
+        time.sleep(3)
+        rospy.loginfo("Ready to go!!!")
+        self.send_initial_config()
 
         # now let's initialize a bunch of variables that many of the
         # other methods in this class will need access to
@@ -225,7 +227,40 @@ class System:
         self.Xest2 = np.zeros((self.system.dsys.nX, 1))
         self.first_flag = True
 
+        self.send_reference_path()
+
         return
+
+    def send_initial_config(self):
+        com = RobotCommands()
+        com.robot_index = self.robot_index
+        com.type = ord('a')
+        com.header.stamp = rospy.get_rostime()
+        com.header.frame_id = "/optimization_frame"
+        com.div = 4
+        com.x = self.Qref[0][2]
+        com.y = 0
+        com.th = 0
+        com.height_left = self.Qref[0][3]
+        com.height_right = 1
+        self.comm_pub.publish(com)
+        return
+
+
+    def send_reference_path(self):
+        path = Path()
+        path.header.frame_id = "/optimization_frame"
+        for i in range(len(self.tref)):
+            pose = PoseStamped()
+            pose.header.frame_id = path.header.frame_id
+            pose.pose.position.x = self.Qref[i][0]
+            pose.pose.position.y = self.Qref[i][1]
+            pose.pose.position.z = 0
+            path.poses.append(pose)
+
+        self.path_pub.publish(path)
+        return
+
 
     def copy_two_to_one(self):
         """
@@ -241,25 +276,25 @@ class System:
         return
 
     def calc_send_controls(self):
-        self.u1 = self.Qref[self.k][2:]
+        self.u1 = self.Xest2[2:4]
         self.u2 = self.Uref[self.k] + \
           matmult(self.Kproj[self.k], self.Xref[self.k]-self.Xest2)
         # now convert to a velocity and send out:
         ucom = (self.u2-self.u1)/DT
         com = RobotCommands()
         com.robot_index = self.robot_index
-        com.type = ord('n')
-        com.v_left = ucom[0]
-        com.v_right = ucom[0]
-        com.v_top = 0
-        com.v_top_left = ucom[1]
-        com.v_top_right = 0
+        com.type = ord('i')
+        com.v_robot = ucom[0]
+        com.w_robot = 0
+        com.rdot = 0
+        com.rdot_left = ucom[1]
+        com.rdot_right = 0
         com.div = 3
         self.comm_pub.publish(com)
 
         return
 
-    def stop_robot(self):
+    def stop_robots(self):
         com = RobotCommands()
         com.robot_index = self.robot_index
         com.type = ord('q')
@@ -305,7 +340,7 @@ class System:
         # predict estimated covariance:
         xkm1 = self.Xpred2
         Fkm1 = self.Avec[self.k]
-        Pkm1 = matmult(Fkm1, self.est_cov, Fkmt.T) + self.proc_cov
+        Pkm1 = matmult(Fkm1, self.est_cov, Fkm1.T) + self.proc_cov
         # innovation:
         yk = self.Xmeas2 - xkm1
         # residual covariance:
@@ -314,7 +349,7 @@ class System:
         Kk = matmult(Pkm1, np.linalg.inv(Sk))
         # updated state estimate:
         xkk = xkm1 + matmult(Kk, yk)
-        tmp = np.identity(self.system.sys.nQ)-Kk
+        tmp = np.identity(self.system.dsys.nX)-Kk
         Pkk = matmult(tmp, Pkm1)
         return (xkk, Pkk)
 
@@ -334,6 +369,8 @@ class System:
             return
 
         if self.first_flag:
+            self.send_initial_config()
+            self.send_reference_path()
             # this is the first run through the callback while in the
             # running state, so let's initialize all of the variables,
             # and then make sure to set the flag back to false at the
@@ -362,8 +399,9 @@ class System:
         # let's increment our index:
         self.k += 1
         # do we need to exit?
-        if self.k >= len(self.tref):
+        if self.k >= len(self.tref)-1:
             self.stop_robots()
+            self.first_flag = True
             rospy.set_param("/operating_condition", 3)
             return
         # copy X2 stuff to X1:
@@ -390,6 +428,16 @@ class System:
         qest.xr = self.Xest2[2]
         qest.r  = self.Xest2[3]
         self.filt_pub.publish(qest)
+
+        # publish the reference pose:
+        qest = PlanarSystemConfig()
+        qest.header.stamp = data.header.stamp
+        qest.header.frame_id = data.header.frame_id
+        qest.xm = self.Qref[self.k][0]
+        qest.ym = self.Qref[self.k][1]
+        qest.xr = self.Qref[self.k][2]
+        qest.r  = self.Qref[self.k][3]
+        self.ref_pub.publish(qest)
 
         return
 

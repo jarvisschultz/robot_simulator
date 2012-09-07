@@ -275,7 +275,7 @@ public:
 	    case 'r': // RESET
 		set_inputs(0.0, 0.0);
 		set_robot_state(0.0, 0.0, 0.0);
-		set_string_heights(0.0, 0.0);
+		set_string_lengths(0.0, 0.0);
 		break;
 	    case 'q': // STOP
 		set_inputs(0.0, 0.0);
@@ -298,7 +298,7 @@ public:
 		break;
 	    case 'd': // EXT_SPEED
 		set_inputs(c.v_robot, c.w_robot);
-		set_winch_inputs(c.v_top, c.v_top);
+		set_winch_inputs(c.rdot, c.rdot);
 		vals[0] = inputs(0);
 		vals[1] = inputs(1);
 		vals[2] = str_inputs(0);
@@ -315,14 +315,14 @@ public:
 		break;
 	    case 'i': // EXT_SPEED_FULL
 		set_inputs(c.v_robot, c.w_robot);
-		set_winch_inputs(c.v_top_left, c.v_top_right);
+		set_winch_inputs(c.rdot_left, c.rdot_right);
 		vals[0] = inputs(0);
 		vals[1] = inputs(1);
 		vals[2] = str_inputs(0);
 		break;
 	    case 'a': // SET_CONFIG_FULL
 		set_robot_state(c.x, c.y, c.th);
-		set_string_heights(c.height_left, c.height_right);
+		set_string_lengths(c.height_left, c.height_right);
 		break;
 	    case 's': // SET_DEF_SPEED
 		ROS_DEBUG("Cannot set default speed yet");
@@ -331,7 +331,7 @@ public:
 		set_robot_state(c.x, c.y, c.th);
 		break;
 	    case 'b': // SET_HEIGHT
-		set_string_heights(c.height_left, c.height_right);
+		set_string_lengths(c.height_left, c.height_right);
 		break;
 	    case 'w': // POSE_REQ
 		ROS_DEBUG("No need to request information from robot simulator");
@@ -361,6 +361,7 @@ public:
 		if (timeout)
 		{
 		    set_inputs(0,0);
+		    set_winch_inputs(0,0);
 		    ROS_ERROR("Robot %d timeout!", robot_index);
 		}
 	    }
@@ -400,10 +401,12 @@ public:
 
     // util function for setting the robot's internal representation
     // of the string lengths.
-    void set_string_heights(const float height_left, const float height_right)
+    void set_string_lengths(const float length_left, const float length_right)
 	{
-	    strings(0) = height_left;
-	    strings(1) = height_right;	    
+	    strings(0) = 0;
+	    strings(1) = 0;
+	    orig_len[0] = length_left;
+	    orig_len[1] = length_right;
 	    return;
 	}
     

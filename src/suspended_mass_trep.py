@@ -197,6 +197,12 @@ class MassSimulator:
         self.last_time = rospy.rostime.get_rostime()
         self.len = h0
 
+        ## get noise value:
+        if rospy.has_param("/simulator_noise"):
+            self.noise = rospy.get_param("/simulator_noise")
+        else:
+            self.noise = 0.0    
+
         return
 
     def inputcb(self, data):
@@ -232,7 +238,7 @@ class MassSimulator:
         p.point = data.pose.pose.position
         p.point.x -= vm[0]
         p.point.y -= vm[1]
-        p.point.z -= vm[2]
+        p.point.z -= vm[2] 
         quat = QuaternionStamped()
         quat.quaternion = data.pose.pose.orientation
         quat.header = p.header
@@ -282,6 +288,8 @@ class MassSimulator:
             self.sys.take_step(dt, rho)
             ## now we can get the state of the system
             q = self.sys.get_current_configuration()
+            ## now add the appropriate amount of noise:
+            q[0] += self.noise*np.random.normal()
             new_point = PointStamped()
             new_point.point.x = q[0]
             new_point.point.y = q[1]
@@ -292,6 +300,8 @@ class MassSimulator:
             self.mass_pub.publish(new_point)
             ## we can also publish the planar results:
             config = PlanarSystemConfig()
+            config.header.frame_id = "/optimization_frame"
+            config.header.stamp = rospy.get_rostime()
             config.xm = q[0]
             config.ym = q[1]
             config.xr = rho[0]
