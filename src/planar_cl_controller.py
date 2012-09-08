@@ -41,6 +41,7 @@ import tf
 from puppeteer_msgs.msg import FullRobotState
 from puppeteer_msgs.msg import PlanarSystemConfig
 from puppeteer_msgs.msg import RobotCommands
+from puppeteer_msgs.srv import PlanarSystemService
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 import trep
@@ -190,12 +191,15 @@ class System:
 
         # now we can define all callbacks, publishers, subscribers,
         # services, and parameters:
-        self.meas_sub = rospy.Subscriber("meas_config", PlanarSystemConfig, self.meascb)
+        self.meas_sub = rospy.Subscriber("meas_config", PlanarSystemConfig,
+                                         self.meascb)
         self.filt_pub = rospy.Publisher("filt_config", PlanarSystemConfig)
         self.ref_pub = rospy.Publisher("ref_config", PlanarSystemConfig)
         self.comm_pub = rospy.Publisher("serial_commands", RobotCommands)
         self.path_pub = rospy.Publisher("mass_ref_path", Path)
         self.ref_pub = rospy.Publisher("ref_config", PlanarSystemConfig)
+        self.conf_serv = rospy.Service("/get_ref_config", PlanarSystemService,
+                                       self.ref_config_service_handler)
         if rospy.has_param("robot_index"):
             self.robot_index = rospy.get_param("robot_index")
         else:
@@ -245,6 +249,43 @@ class System:
         com.height_right = 1
         self.comm_pub.publish(com)
         return
+
+
+    def ref_config_service_handler(self, req):
+        """
+        Return a reference configuration for the system by either
+        index or time
+        """
+        if req.t != 0:
+            # then use time, otherwise use the index
+            try:
+                index = [i for i,x in enumerate(self.tref) if x <= req.t < b[i+1]][0]
+            except:
+                rospy.logerr("Invalid time for service request!")
+                return None
+            if index > len(self.tref)-1:
+                rospy.logerr("Requested index is too large!")
+                return None
+            config = PlanarSystemConfig()
+            config.xm = self.Qref[index][0]
+            config.ym = self.Qref[index][1]
+            config.xr = self.Qref[index][2]
+            config.r  = self.Qref[index][3]
+            return {'config': config}
+        else:
+            # use the index:
+            if req.index > len(self.tref)-1:
+                rospy.logerr("Requested index is too large!")
+                return None
+            else:
+                config = PlanarSystemConfig()
+                config.xm = self.Qref[req.index][0]
+                config.ym = self.Qref[req.index][1]
+                config.xr = self.Qref[req.index][2]
+                config.r  = self.Qref[req.index][3]
+                return {'config': config}
+        return None
+
 
 
     def send_reference_path(self):
