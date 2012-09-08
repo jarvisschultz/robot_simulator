@@ -259,7 +259,8 @@ class System:
         if req.t != 0:
             # then use time, otherwise use the index
             try:
-                index = [i for i,x in enumerate(self.tref) if x <= req.t < b[i+1]][0]
+                index = [i for i,x in enumerate(self.tref) \
+                         if x <= req.t < self.tref[i+1]][0]
             except:
                 rospy.logerr("Invalid time for service request!")
                 return None

@@ -13,7 +13,7 @@ def main():
     srv = rospy.ServiceProxy('/get_ref_config', PlanarSystemService)
 
     try:
-        resp1 = srv(index=0)
+        resp1 = srv(t=8.0)
         print "Response:"
         print resp1.config.xm, resp1.config.ym, resp1.config.xr, resp1.config.r
     except rospy.ServiceException, e:
