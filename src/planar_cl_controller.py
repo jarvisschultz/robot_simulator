@@ -321,8 +321,8 @@ class System:
 
     def calc_send_controls(self):
         self.u1 = self.Xest2[2:4]
-        self.u2 = self.Uref[self.k] # + \
-        #   matmult(self.Kproj[self.k], self.Xref[self.k]-self.Xest2)
+        self.u2 = self.Uref[self.k] + \
+          matmult(self.Kproj[self.k], self.Xref[self.k]-self.Xest2)
         # now convert to a velocity and send out:
         ucom = (self.u2-self.u1)/DT
         com = RobotCommands()
