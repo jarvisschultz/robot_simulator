@@ -24,6 +24,7 @@ PUBLISHERS:
     - PlanarSystemConfig (ref_config)
     - RobotCommands     (serial_commands)
     - Path (mass_ref_path)
+    - PlanarCovariance (post_covariance)
 
 SERVICES:
     - PlanarSystemService (get_ref_config)
@@ -42,6 +43,7 @@ from puppeteer_msgs.msg import FullRobotState
 from puppeteer_msgs.msg import PlanarSystemConfig
 from puppeteer_msgs.msg import RobotCommands
 from puppeteer_msgs.srv import PlanarSystemService
+from puppeteer_msgs.msg import PlanarCovariance
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 import trep
@@ -185,7 +187,7 @@ class System:
         rospy.loginfo("Successfully found linearization and feedback law")
 
         # now we can define our filter parameters:
-        self.meas_cov = 2*np.diag((0.5,0.5,0.5,0.5,0.75,0.75,0.75,0.75)) # measurement covariance
+        self.meas_cov = np.diag((0.5,0.5,0.5,0.5,0.75,0.75,0.75,0.75)) # measurement covariance
         self.proc_cov = np.diag((0.1,0.1,0.1,0.1,0.15,0.15,0.15,0.15)) # process covariance
         self.est_cov = copy.deepcopy(self.meas_cov) # estimate covariance
 
@@ -198,6 +200,7 @@ class System:
         self.comm_pub = rospy.Publisher("serial_commands", RobotCommands)
         self.path_pub = rospy.Publisher("mass_ref_path", Path)
         self.ref_pub = rospy.Publisher("ref_config", PlanarSystemConfig)
+        self.cov_pub = rospy.Publisher("post_covariance", PlanarCovariance)
         self.conf_serv = rospy.Service("get_ref_config", PlanarSystemService,
                                        self.ref_config_service_handler)
         if rospy.has_param("robot_index"):
@@ -302,7 +305,6 @@ class System:
             pose.pose.position.y = self.Qref[i][1]
             pose.pose.position.z = 0
             path.poses.append(pose)
-
         self.path_pub.publish(path)
         return
 
@@ -320,6 +322,7 @@ class System:
         self.Xest1 = copy.deepcopy(self.Xest2)
         return
 
+
     def calc_send_controls(self):
         self.u1 = self.Xest2[2:4]
         self.u2 = self.Uref[self.k] + \
@@ -336,8 +339,23 @@ class System:
         com.rdot_right = 0
         com.div = 3
         self.comm_pub.publish(com)
-
         return
+
+
+    def publish_covariance(self):
+        """
+        This function simply publishes the updated covariance from the
+        EKF.
+        """
+        tmp_cov = copy.deepcopy(self.est_cov)
+        tmp_cov = np.ravel(tmp_cov)
+        cov = PlanarCovariance()
+        for i,val in enumerate(tmp_cov):
+            cov.covariance[i] = val
+        self.cov_pub.publish(cov)
+        del tmp_cov, cov
+        return
+
 
     def stop_robots(self):
         com = RobotCommands()
@@ -478,6 +496,8 @@ class System:
         (self.Xest2, self.est_cov) = self.update_filter()
         # run control law and send controls:
         self.calc_send_controls()
+        # publish the covariance:
+        self.publish_covariance()
 
         # publish the estimated pose:
         qest = PlanarSystemConfig()
