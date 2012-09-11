@@ -61,7 +61,7 @@ BALL_MASS = 0.1244 ## kg
 g = 9.81 ## m/s^2
 h0 = 1 ## default height of robot in m
 DT = 1/30.0 ## nominal dt for the system
-
+CALLBACK_DIVISOR = 30
 
 # define a simple helper function for multiplying numpy arrays as
 # matrices
@@ -232,6 +232,7 @@ class System:
         self.Xest1 = np.zeros((self.system.dsys.nX, 1))
         self.Xest2 = np.zeros((self.system.dsys.nX, 1))
         self.first_flag = True
+        self.callback_count = 0
 
         self.send_reference_path()
 
@@ -413,11 +414,16 @@ class System:
         # first, let's get the operating condition and act
         # appropriately:
         op = rospy.get_param("/operating_condition")
+        # increment callback count
+        self.callback_count += 1;
 
         if (op != 2):
             # we are not running, so let's just keep running the
             # initializations and exiting
             self.first_flag = True
+            # once in a while, let's send the reference path
+            if not (self.callback_count%CALLBACK_DIVISOR):
+                self.send_reference_path()
             return
 
         if self.first_flag:
