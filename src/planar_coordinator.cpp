@@ -349,10 +349,10 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "planar_system_coordinator");
 
-    log4cxx::LoggerPtr my_logger =
-    	log4cxx::Logger::getLogger(ROSCONSOLE_DEFAULT_NAME);
-    my_logger->setLevel(
-	ros::console::g_level_lookup[ros::console::levels::Debug]);
+    // log4cxx::LoggerPtr my_logger =
+    // 	log4cxx::Logger::getLogger(ROSCONSOLE_DEFAULT_NAME);
+    // my_logger->setLevel(
+    // 	ros::console::g_level_lookup[ros::console::levels::Debug]);
 
     ros::NodeHandle node;
 

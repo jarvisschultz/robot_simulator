@@ -6,29 +6,28 @@
   <arg name="index" value="1" />
   <param name="/number_robots" type="int" value="1" />
 
-  <!-- start up the kinect -->
-  <include file="$(find objecttracker_nu)/launch/nodelet_planar_system.launch" />
-  
   <!-- load serial node dictionary -->
   <rosparam file="$(find serial_node)/data/serial_device_dict.xml" command="load"/>
 
   <!-- start up robot, controller, estimator, etc. -->
-  <group ns="robot_1" >
-    <arg name="rn" value="robot_1" />
-    <!-- set all parameters for this namespace -->
-    <param name="robot_index" value="$(arg index)" />
-    <!-- now I want to start up the controller/ filter, and the
-	 coordinator for the system -->
-    <node pkg="robot_simulator" name="controller"
-	  type="planar_cl_controller.py" output="screen" respawn="true"
-	  args="-f $(arg dir)$(arg file)"/>
-    <node pkg="robot_simulator" name="coordinator"
-	  type="planar_coordinator" output="screen"
-	  respawn="true" />
-    <!-- start serial node -->
-    <node pkg="serial_node" type="multi_serial_topic" name="serial_node"
-    	  output="log" respawn="true" />
-  </group>
+  <!-- <group ns="robot_1" > -->
+  <arg name="rn" value="robot_1" />
+  <!-- set all parameters for this namespace -->
+  <param name="robot_index" value="$(arg index)" />
+  <!-- start up the kinect and both planar trackers -->
+  <include file="$(find objecttracker_nu)/launch/nodelet_planar_system.launch" />
+  <!-- now I want to start up the controller/ filter, and the
+       coordinator for the system -->
+  <node pkg="robot_simulator" name="controller"
+	type="planar_cl_controller.py" output="screen" respawn="true"
+	args="-f $(arg dir)$(arg file)"/>
+  <node pkg="robot_simulator" name="coordinator"
+	type="planar_coordinator" output="screen"
+	respawn="true" />
+  <!-- start serial node -->
+  <node pkg="serial_node" type="multi_serial_topic" name="serial_node"
+    	output="log" respawn="true" />
+  <!-- </group> -->
   
   
   <!-- start up the keyboard node -->

@@ -198,7 +198,7 @@ class System:
         self.comm_pub = rospy.Publisher("serial_commands", RobotCommands)
         self.path_pub = rospy.Publisher("mass_ref_path", Path)
         self.ref_pub = rospy.Publisher("ref_config", PlanarSystemConfig)
-        self.conf_serv = rospy.Service("/get_ref_config", PlanarSystemService,
+        self.conf_serv = rospy.Service("get_ref_config", PlanarSystemService,
                                        self.ref_config_service_handler)
         if rospy.has_param("robot_index"):
             self.robot_index = rospy.get_param("robot_index")
@@ -213,6 +213,8 @@ class System:
         time.sleep(3)
         rospy.loginfo("Ready to go!!!")
         self.send_initial_config()
+        # send robot a start command:
+        self.send_start_command()
 
         # now let's initialize a bunch of variables that many of the
         # other methods in this class will need access to
@@ -319,8 +321,8 @@ class System:
 
     def calc_send_controls(self):
         self.u1 = self.Xest2[2:4]
-        self.u2 = self.Uref[self.k] + \
-          matmult(self.Kproj[self.k], self.Xref[self.k]-self.Xest2)
+        self.u2 = self.Uref[self.k] # + \
+        #   matmult(self.Kproj[self.k], self.Xref[self.k]-self.Xest2)
         # now convert to a velocity and send out:
         ucom = (self.u2-self.u1)/DT
         com = RobotCommands()
@@ -340,8 +342,16 @@ class System:
         com = RobotCommands()
         com.robot_index = self.robot_index
         com.type = ord('q')
+        com.header.stamp = rospy.get_rostime()
         self.comm_pub.publish(com)
         return
+
+    def send_start_command(self):
+        com = RobotCommands()
+        com.robot_index = self.robot_index
+        com.type = ord('m')
+        com.header.stamp = rospy.get_rostime()
+        self.comm_pub.publish(com)
 
     def get_gen_mom(self):
         """ Initialize a VI, and calculate the discrete Legendre
@@ -411,6 +421,7 @@ class System:
             return
 
         if self.first_flag:
+            rospy.loginfo("Beginning trajectory")
             self.send_initial_config()
             self.send_reference_path()
             # this is the first run through the callback while in the
@@ -442,6 +453,7 @@ class System:
         self.k += 1
         # do we need to exit?
         if self.k >= len(self.tref)-1:
+            rospy.loginfo("Trajectory finished...")
             self.stop_robots()
             self.first_flag = True
             rospy.set_param("/operating_condition", 3)
