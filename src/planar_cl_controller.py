@@ -315,7 +315,6 @@ class System:
         variables into the "1" variables.
         """
         self.t1 = copy.deepcopy(self.t2)
-        self.u1 = copy.deepcopy(self.u2)
         self.Qmeas1 = copy.deepcopy(self.Qmeas2)
         self.Xmeas1 = copy.deepcopy(self.Xmeas2)
         self.Xpred1 = copy.deepcopy(self.Xpred2)
@@ -397,7 +396,11 @@ class System:
         self.system.mvi.initialize_from_state(self.t1,
                                               self.Xest1[0:4],
                                               self.Xest1[4:6])
-        self.system.mvi.step(self.t2, u1=(), k2=self.u2)
+        # let's interpolate/extrapolate the u2 to get the actual one
+        # i.e. let's account for the fact that dt is not actually
+        # constant:
+        con = self.u1 + ((self.u2-self.u1)/DT)*(self.t2-self.t1)
+        self.system.mvi.step(self.t2, u1=(), k2=con)
         v2 = (self.system.mvi.q2[2:]-self.system.mvi.q1[2:])/ \
           (self.system.mvi.t2-self.system.mvi.t1)
         tmp = np.hstack((self.system.mvi.q2,
@@ -464,9 +467,10 @@ class System:
             # our initial prediction for the state is just the initial
             # state of the system:
             self.Xpred2 = self.Xref[self.k]
-            # for our initial estimate, let's just average the
-            # prediction and the measurement
-            self.Xest2 = (self.Xmeas2+self.Xpred2)/2.0
+            # # for our initial estimate, let's just average the
+            # # prediction and the measurement
+            # self.Xest2 = (self.Xmeas2+self.Xpred2)/2.0
+            self.Xest2 = self.Xmeas2
             # now run our control law
             self.calc_send_controls()
             # send out nominal (feedforward) controls:
