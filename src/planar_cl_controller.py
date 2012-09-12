@@ -408,12 +408,31 @@ class System:
                          v2))
         return tmp
 
+
+    def locally_linearize(self):
+        """
+        This function will locally linearize a dsys object around the
+        current prediction.  Note that the variational integrator
+        contained in self.system.mvi is already set correctly to do
+        the correct linearization.  So instead of calling the
+        linearize_trajectory method, I will build the matrices myself.
+        """
+        # The mvi was initialized at X1 in self.get_prediction(), and
+        # it was stepped to t2, using the correct input.  So all we
+        # need to do is set the dsys times and index
+        self.system.dsys.time = np.array([self.t1, self.t2])
+        self.system.dsys._k = 0 # BAD PRACTICE!!!
+        return self.system.dsys.fdx()
+
+
     def update_filter(self):
         """ Run the EKF equations to update the kalman filter, and
         return the posterior mean and covariance """
         # predict estimated covariance:
         xkm1 = self.Xpred2
-        Fkm1 = self.Avec[self.k]
+        Atmp = self.locally_linearize()
+        Fkm1 = Atmp.copy()
+        # Fkm1 = self.Avec[self.k]
         Pkm1 = matmult(Fkm1, self.est_cov, Fkm1.T) + self.proc_cov
         # innovation:
         yk = self.Xmeas2 - xkm1
