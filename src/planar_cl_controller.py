@@ -180,7 +180,7 @@ class System:
 
         # Now we can linearize the trajectory, and find control gains:
         # first we need the cost functions (let's start with identity)
-        def Qfunc(kf): return np.diag([1, 1, 1, 1, 1, 1, 1, 1])
+        def Qfunc(kf): return np.diag([10, 10, 1, 1, 1, 1, 1, 1])
         def Rfunc(kf): return np.diag([1, 1])
         (self.Kproj, self.Avec, self.Bvec) = self.system.dsys.calc_feedback_controller(
             self.Xref, self.Uref, Q=Qfunc, R=Rfunc, return_linearization=True)
