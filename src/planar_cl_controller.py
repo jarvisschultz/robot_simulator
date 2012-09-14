@@ -57,6 +57,7 @@ import scipy as sp
 import os
 import copy
 import time
+from scipy.interpolate import interp1d as spline
 
 ## define some global constants:
 BALL_MASS = 0.1244 ## kg
@@ -172,6 +173,9 @@ class System:
         # combine reference trajectory into state and input references:
         (self.Xref, self.Uref) = self.system.dsys.build_trajectory(
             Q=self.Qref, p=self.pref, v=self.vref, u=self.uref, rho=self.rhoref)
+        # let's make a spline of the uref so that I can account
+        # for the noise that I have in dt.
+        self.Ufunc = spline(self.tref, np.vstack((self.Uref[0],self.Uref)).T)
         # now we can initialize the variational integrator using the
         # reference trajectory as our guide
         self.system.dsys.set(self.Xref[0], self.Uref[0], 0)
@@ -323,9 +327,16 @@ class System:
 
 
     def calc_send_controls(self):
-        self.u1 = self.Xest2[2:4]
-        self.u2 = self.Uref[self.k] + \
-          matmult(self.Kproj[self.k], self.Xref[self.k]-self.Xest2)
+        try:
+            self.u1  = self.Ufunc(self.t2)
+            self.u2 = self.Ufunc(self.t2+DT)
+        except:
+            self.u1 = self.Ufunc(self.Ufunc.x[-1])
+            self.u2 = self.Ufunc(self.Ufunc.x[-1])
+        # self.u1 = self.Xest2[2:4]
+        # self.u2 = self.Uref[self.k] 
+        #+ \
+          # matmult(self.Kproj[self.k], self.Xref[self.k]-self.Xest2)
         # now convert to a velocity and send out:
         ucom = (self.u2-self.u1)/DT
         com = RobotCommands()
@@ -444,6 +455,9 @@ class System:
         xkk = xkm1 + matmult(Kk, yk)
         tmp = np.identity(self.system.dsys.nX)-Kk
         Pkk = matmult(tmp, Pkm1)
+        # use following lines for disabling the filter:
+        # xkk = self.Xmeas2
+        # Pkk = self.est_cov
         return (xkk, Pkk)
 
 
