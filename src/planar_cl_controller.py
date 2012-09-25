@@ -63,7 +63,7 @@ from scipy.interpolate import interp1d as spline
 BALL_MASS = 0.1244 ## kg
 g = 9.81 ## m/s^2
 h0 = 1 ## default height of robot in m
-DT = 1/30.0 ## nominal dt for the system
+DT = 1/10.0 ## nominal dt for the system
 CALLBACK_DIVISOR = 30
 
 # define a simple helper function for multiplying numpy arrays as
@@ -160,8 +160,9 @@ class System:
             sys.exit(1)
         else:
             fname = args[args.index('--filename')+1]
+            print "filename is ",fname
             if not os.path.isfile(fname):
-                rospy.logerr("Filename not found: ",fname)
+                rospy.logerr("Filename not found: %s",fname)
                 sys.exit(1)
 
         # now we can load in the traj:
