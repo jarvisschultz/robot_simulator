@@ -189,7 +189,8 @@ public:
                     // ERROR CHECK	  //
                     ////////////////////////
 		    // if no error:
-		    cal_pos = (mass_cal_pos + robot_cal_pos)/2.0;
+		    // cal_pos = (mass_cal_pos + robot_cal_pos)/2.0;
+		    cal_pos = mass_cal_pos;
 
 		    // reset vars:
 		    calibrate_count = 0;

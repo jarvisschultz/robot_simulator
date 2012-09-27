@@ -4,7 +4,7 @@
   <arg name="dir" default="$(find robot_simulator)/data/" />
   <arg name="vis" default="true" />
   <arg name="index" value="1" />
-  <arg name="freq" default="30" />
+  <arg name="freq" default="30.0" />
   <param name="/number_robots" type="int" value="1" />
   
 
@@ -20,7 +20,9 @@
 	args="messages /camera/depth/points $(arg freq)
 	      /camera/depth/points_throttled" 
 	respawn="true"/>
-    <!-- start up the kinect and both planar trackers -->
+  <!-- set a parameter telling the controller that it is running at freq -->
+  <param name="controller_freq" type="double" value="$(arg freq)"/>
+  <!-- start up the kinect and both planar trackers -->
   <include file="$(find objecttracker_nu)/launch/nodelet_planar_system.launch" >
     <arg name="input" value="points_throttled" />
   </include>

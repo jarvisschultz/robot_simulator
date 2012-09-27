@@ -63,7 +63,7 @@ from scipy.interpolate import interp1d as spline
 BALL_MASS = 0.1244 ## kg
 g = 9.81 ## m/s^2
 h0 = 1 ## default height of robot in m
-DT = 1/10.0 ## nominal dt for the system
+DT = 1/30.0 ## nominal dt for the system
 CALLBACK_DIVISOR = 30
 
 # define a simple helper function for multiplying numpy arrays as
@@ -241,7 +241,30 @@ class System:
 
         self.send_reference_path()
 
+        ## let's check for the existence of a frequency param.
+        ## Otherwise, let's use the default
+        if rospy.has_param("controller_freq"):
+            tmp = rospy.get_param("controller_freq")
+            self.dt = 1/float(tmp)
+        else:
+            tmp = 1/DT
+            self.dt = DT
+            rospy.set_param("controller_freq", tmp)
+        rospy.loginfo("Controller frequency = %f Hz (dt = %f sec.)", tmp, self.dt)
+
+        # check that read in mat file is approximately the same
+        # frequency as the desired:
+        if np.abs(self.dt - (self.tref[1]-self.tref[0])) >= 0.001:
+            rospy.logerr("parameter frequency and mat file frequency don't match!")
+            rospy.logerr("parameter = %f s   mat file = %f s",self.dt,
+                         (self.tref[1]-self.tref[0]))
+            rospy.signal_shutdown("Frequency Mismatch!")
+        # idle on startup:
+        rospy.set_param("/operating_condition", 0)
+
         return
+
+
 
     def send_initial_config(self):
         com = RobotCommands()
@@ -257,6 +280,7 @@ class System:
         com.height_right = 1
         self.comm_pub.publish(com)
         return
+
 
 
     def ref_config_service_handler(self, req):
@@ -311,6 +335,8 @@ class System:
         return
 
 
+
+
     def copy_two_to_one(self):
         """
         This function merely performs a deep copy for all of the "2"
@@ -324,12 +350,13 @@ class System:
         return
 
 
+
     def calc_send_controls(self):
         self.u1 = self.Xest2[2:4]
         self.u2 = self.Uref[self.k] + \
           matmult(self.Kproj[self.k], self.Xref[self.k]-self.Xest2)
         # now convert to a velocity and send out:
-        ucom = (self.u2-self.u1)/DT
+        ucom = (self.u2-self.u1)/self.dt
         com = RobotCommands()
         com.robot_index = self.robot_index
         com.type = ord('i')
@@ -358,6 +385,7 @@ class System:
         return
 
 
+
     def stop_robots(self):
         com = RobotCommands()
         com.robot_index = self.robot_index
@@ -366,12 +394,15 @@ class System:
         self.comm_pub.publish(com)
         return
 
+
     def send_start_command(self):
         com = RobotCommands()
         com.robot_index = self.robot_index
         com.type = ord('m')
         com.header.stamp = rospy.get_rostime()
         self.comm_pub.publish(com)
+        return
+
 
     def get_gen_mom(self):
         """ Initialize a VI, and calculate the discrete Legendre
@@ -384,12 +415,14 @@ class System:
         p2 = self.system.mvi.p2
         return p2
 
+
     def get_kin_vel(self):
         """ Find the finite difference velocities of the kinematic
         configuration variables, and return the array """
         qk = self.Qmeas2[2:]
         qkm = self.Qmeas1[2:]
         return ((qk-qkm)/(self.t2-self.t1))
+
 
     def get_prediction(self):
         """ Use the variational integrator to
@@ -401,7 +434,7 @@ class System:
         # let's interpolate/extrapolate the u2 to get the actual one
         # i.e. let's account for the fact that dt is not actually
         # constant:
-        con = self.u1 + ((self.u2-self.u1)/DT)*(self.t2-self.t1)
+        con = self.u1 + ((self.u2-self.u1)/self.dt)*(self.t2-self.t1)
         self.system.mvi.step(self.t2, u1=(), k2=con)
         v2 = (self.system.mvi.q2[2:]-self.system.mvi.q1[2:])/ \
           (self.system.mvi.t2-self.system.mvi.t1)
@@ -409,6 +442,7 @@ class System:
                          self.system.mvi.p2,
                          v2))
         return tmp
+
 
 
     def locally_linearize(self):
@@ -425,6 +459,7 @@ class System:
         self.system.dsys.time = np.array([self.t1, self.t2])
         self.system.dsys._k = 0 # BAD PRACTICE!!!
         return self.system.dsys.fdx()
+
 
 
     def update_filter(self):
@@ -450,6 +485,31 @@ class System:
         # xkk = self.Xmeas2
         # Pkk = self.est_cov
         return (xkk, Pkk)
+
+
+
+    # function for publishing reference and filtered information:
+    def send_filt_and_ref(self, data):
+        # publish the estimated pose:
+        qest = PlanarSystemConfig()
+        qest.header.stamp = data.header.stamp
+        qest.header.frame_id = data.header.frame_id
+        qest.xm = self.Xest2[0]
+        qest.ym = self.Xest2[1]
+        qest.xr = self.Xest2[2]
+        qest.r  = self.Xest2[3]
+        self.filt_pub.publish(qest)
+        # publish the reference pose:
+        qest = PlanarSystemConfig()
+        qest.header.stamp = data.header.stamp
+        qest.header.frame_id = data.header.frame_id
+        qest.xm = self.Qref[self.k][0]
+        qest.ym = self.Qref[self.k][1]
+        qest.xr = self.Qref[self.k][2]
+        qest.r  = self.Qref[self.k][3]
+        self.ref_pub.publish(qest)
+        return
+
 
 
     # define the callback function for the estimate out of the kinect
@@ -497,6 +557,8 @@ class System:
             self.Xest2 = self.Xmeas2
             # now run our control law
             self.calc_send_controls()
+            # send filter and reference info:
+            self.send_filt_and_ref(data)
             # send out nominal (feedforward) controls:
             self.first_flag = False
             return
@@ -526,26 +588,8 @@ class System:
         self.calc_send_controls()
         # publish the covariance:
         self.publish_covariance()
-
-        # publish the estimated pose:
-        qest = PlanarSystemConfig()
-        qest.header.stamp = data.header.stamp
-        qest.header.frame_id = data.header.frame_id
-        qest.xm = self.Xest2[0]
-        qest.ym = self.Xest2[1]
-        qest.xr = self.Xest2[2]
-        qest.r  = self.Xest2[3]
-        self.filt_pub.publish(qest)
-
-        # publish the reference pose:
-        qest = PlanarSystemConfig()
-        qest.header.stamp = data.header.stamp
-        qest.header.frame_id = data.header.frame_id
-        qest.xm = self.Qref[self.k][0]
-        qest.ym = self.Qref[self.k][1]
-        qest.xr = self.Qref[self.k][2]
-        qest.r  = self.Qref[self.k][3]
-        self.ref_pub.publish(qest)
+        # send filter and reference info:
+        self.send_filt_and_ref(data)
 
         return
 
