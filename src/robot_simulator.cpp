@@ -54,6 +54,7 @@
 #define MAX_FLOATS (5) // maximum number of floats that we can send
 		       // with one command
 #define DEFAULT_STRING_LEN (1)
+#define OCCLUSION_LIMS (30)
 
 ///////////////////////////
 // OBJECTS AND FUNCTIONS //
@@ -77,6 +78,7 @@ private:
     bool timeout;
     double *orig_len;
     geometry_msgs::Point Lengths, Lengths_nf;
+    boost::array<double,36ul> kincov;
     
 
 public:
@@ -131,6 +133,18 @@ public:
 	orig_len = new double[2];
 	orig_len[0] = DEFAULT_STRING_LEN;
 	orig_len[1] = DEFAULT_STRING_LEN;
+
+	// set covariance values:
+	double kin_cov_dist = 0.5;	// in meters^2
+	double kin_cov_ori = 100.0;	// radians^2
+	boost::array<double,36ul> tmp = {{kin_cov_dist, 0, 0, 0, 0, 0,
+					  0, kin_cov_dist, 0, 0, 0, 0,
+					  0, 0,        99999, 0, 0, 0,
+					  0, 0, 0,        99999, 0, 0,
+					  0, 0, 0, 0,        99999, 0,
+					  0, 0, 0, 0, 0,  kin_cov_ori}};
+	kincov = tmp;
+
 	
 	return;
     }
@@ -205,6 +219,21 @@ public:
 	    odom.pose.pose.orientation = quat;
 
 	    ROS_DEBUG("Simulator publishing on vo topic...");
+
+	    // to simulate the effects of occlusions, let's
+	    // occasionally publish a pose with a huge covariance
+	    static unsigned int occlusion_cnt = 0;
+	    occlusion_cnt++;
+	    if (!(occlusion_cnt%OCCLUSION_LIMS))
+	    {
+		boost::array<double,36ul> tmpcov;
+		for (int i=0; i<36; i++)
+		    tmpcov[i] = kincov[i]*1000.0;
+		odom.pose.covariance = tmpcov;
+	    }
+	    else
+		odom.pose.covariance = kincov;
+	    
 	    pub.publish(odom);
 
 	    // now publish the noise-free version:
