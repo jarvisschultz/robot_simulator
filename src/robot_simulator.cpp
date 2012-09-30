@@ -55,7 +55,7 @@
 		       // with one command
 #define DEFAULT_STRING_LEN (1)
 #define OCCLUSION_LIMS (30)
-
+#define DEFAULT_ERR (10.0)
 ///////////////////////////
 // OBJECTS AND FUNCTIONS //
 ///////////////////////////
@@ -230,6 +230,13 @@ public:
 		for (int i=0; i<36; i++)
 		    tmpcov[i] = kincov[i]*1000.0;
 		odom.pose.covariance = tmpcov;
+		odom.pose.pose.position.x = DEFAULT_ERR;
+		odom.pose.pose.position.y = DEFAULT_ERR;
+		odom.pose.pose.position.z = DEFAULT_ERR;
+		odom.pose.pose.orientation.w = 1;
+		odom.pose.pose.orientation.x = 0;
+		odom.pose.pose.orientation.y = 0;
+		odom.pose.pose.orientation.z = 0;						
 	    }
 	    else
 		odom.pose.covariance = kincov;
