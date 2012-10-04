@@ -20,6 +20,7 @@
 #include <iterator>
 #include <stdio.h>
 #include <algorithm>
+#include <time.h>
 
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
@@ -54,7 +55,7 @@
 #define MAX_FLOATS (5) // maximum number of floats that we can send
 		       // with one command
 #define DEFAULT_STRING_LEN (1)
-#define OCCLUSION_LIMS (30)
+#define OCCLUSION_LIMS (300)
 #define DEFAULT_ERR (10.0)
 ///////////////////////////
 // OBJECTS AND FUNCTIONS //
@@ -144,8 +145,7 @@ public:
 					  0, 0, 0, 0,        99999, 0,
 					  0, 0, 0, 0, 0,  kin_cov_ori}};
 	kincov = tmp;
-
-	
+	srand(time(NULL));
 	return;
     }
 
@@ -223,11 +223,16 @@ public:
 	    // to simulate the effects of occlusions, let's
 	    // occasionally publish a pose with a huge covariance
 	    static unsigned int occlusion_cnt = 0;
+	    static bool occlusion_flag = false;
+	    static int occlusion_exit = rand()%50;
+	    static int occlusion_exit_cnt = 0;
 	    occlusion_cnt++;
-	    if (!(occlusion_cnt%OCCLUSION_LIMS))
+	    if (!(occlusion_cnt%OCCLUSION_LIMS) || occlusion_flag)
 	    {
+		occlusion_exit_cnt++;
+		occlusion_flag = true;
 		boost::array<double,36ul> tmpcov;
-		for (int i=0; i<36; i++)
+		for (int i=0; i<36; i++) 
 		    tmpcov[i] = kincov[i]*1000.0;
 		odom.pose.covariance = tmpcov;
 		odom.pose.pose.position.x = DEFAULT_ERR;
@@ -236,7 +241,14 @@ public:
 		odom.pose.pose.orientation.w = 1;
 		odom.pose.pose.orientation.x = 0;
 		odom.pose.pose.orientation.y = 0;
-		odom.pose.pose.orientation.z = 0;						
+		odom.pose.pose.orientation.z = 0;
+
+		if  (occlusion_exit_cnt == occlusion_exit)
+		{
+		    occlusion_flag = false;
+		    occlusion_exit_cnt = 0;
+		    occlusion_exit = rand()%30;
+		}
 	    }
 	    else
 		odom.pose.covariance = kincov;
