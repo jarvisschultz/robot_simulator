@@ -243,11 +243,12 @@ public:
 		odom.pose.pose.orientation.y = 0;
 		odom.pose.pose.orientation.z = 0;
 
-		if  (occlusion_exit_cnt == occlusion_exit)
+		if  (occlusion_exit_cnt > occlusion_exit)
 		{
 		    occlusion_flag = false;
 		    occlusion_exit_cnt = 0;
-		    occlusion_exit = rand()%30;
+		    occlusion_exit = rand()%50;
+		    occlusion_cnt = rand()%OCCLUSION_LIMS;
 		}
 	    }
 	    else
