@@ -253,13 +253,6 @@ public:
 	    }
 	    else
 		odom.pose.covariance = kincov;
-	    if (occlusion_cnt > OCCLUSION_LIMS)
-	    {
-		occlusion_flag = false;
-		occlusion_cnt = 0;
-		occlusion_exit_cnt = 0;
-		occlusion_exit = rand()%30;
-	    }
 	    
 	    pub.publish(odom);
 
