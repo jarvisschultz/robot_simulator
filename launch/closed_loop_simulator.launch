@@ -4,6 +4,7 @@
   <arg name="dir" default="$(find robot_simulator)/data/" />
   <arg name="vis" default="true" />
   <arg name="index" value="1" />
+  <arg name="receding" default="false" />
 
   <!-- first let's add the static frame broadcaster that broadcasts frames in a default config -->
   <include file="$(find robot_simulator)/launch/default_calibration_frames.launch" />
@@ -25,9 +26,12 @@
 
     <!-- now I want to start up the controller/ filter, and the
 	 coordinator simulator -->
-    <node pkg="robot_simulator" name="controller"
-	  type="planar_cl_controller.py" output="screen" respawn="true"
-	  args="-f $(arg dir)$(arg file)"/>
+  <node pkg="robot_simulator" name="controller"
+	type="planar_cl_controller.py" output="screen" respawn="true"
+	args="-f $(arg dir)$(arg file)" unless="$(arg receding)"/>
+  <node pkg="robot_simulator" name="receding_controller"
+	type="receding_planar_controller.py" output="screen" respawn="true"
+	args="-f $(arg dir)$(arg file)" if="$(arg receding)"/>
   </group>
 
   <!-- start up the keyboard node -->

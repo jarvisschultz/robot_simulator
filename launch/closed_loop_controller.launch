@@ -5,6 +5,7 @@
   <arg name="vis" default="true" />
   <arg name="index" value="1" />
   <arg name="freq" default="30.0" />
+  <arg name="receding" default="false" />
   <param name="/number_robots" type="int" value="1" />
   
 
@@ -30,7 +31,10 @@
        coordinator for the system -->
   <node pkg="robot_simulator" name="controller"
 	type="planar_cl_controller.py" output="screen" respawn="true"
-	args="-f $(arg dir)$(arg file)"/>
+	args="-f $(arg dir)$(arg file)" unless="$(arg receding)"/>
+  <node pkg="robot_simulator" name="receding_controller"
+	type="receding_planar_controller.py" output="screen" respawn="true"
+	args="-f $(arg dir)$(arg file)" if="$(arg receding)"/>
   <node pkg="robot_simulator" name="coordinator"
 	type="planar_coordinator" output="screen"
 	respawn="true" />
