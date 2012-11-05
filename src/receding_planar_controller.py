@@ -1,20 +1,16 @@
 #!/usr/bin/env python
 """
 Jarvis Schultz
-August 2012
+November 2012
 
-This program implements the full blown closed-loop controller for the
-planar suspended mass system.  It must read in a trajectory mat file
-from trep.  From this file we can get reference trajectories,
-linearizations, and controller gains. This node subscribes to a
-special message that contains all of the state variables for the
-planar system.  This can be a noisy measurement, or an output from a
-simulator.  This node then implements an EKF and publishes a filtered
-version of the measured (or simulated signal).  To do this, it must
-also subscribe to the inputs that have been sent to the robots (or
-just use the ones that it also sends to the serial node or the
-simulator). Once it has obtained the filtered state, it runs the
-control law, and publishes commands for the simulator.
+This program implements a full closed-loop receding horizon controller plus EKF
+estimator for the planar mass system.  Every time a new measurement is received,
+the estimator produces a new estimate for the full state of the system.  A
+different node combines the history of states with the original reference
+trajectory, and re-runs the discrete optimization using the original optimal
+solution as the initial guess.  Once the optimization is complete, a new
+trajectory is available...
+        ##### Should I access with a service or a topic? ######
 
 SUBSCRIPTIONS:
     - PlanarSystemConfig (meas_config)
@@ -30,8 +26,8 @@ SERVICES:
     - PlanarSystemService (get_ref_config)
 
 NOTES:
-    - Let's assume that the configurations that are received in
-    this node are guaranteed to be in the right coordinate system.
+    - Let's assume that the configurations that are received in this node are
+    guaranteed to be in the right coordinate system.
 
 """
 
@@ -203,8 +199,6 @@ class System:
         self.path_pub = rospy.Publisher("mass_ref_path", Path)
         self.ref_pub = rospy.Publisher("ref_config", PlanarSystemConfig)
         self.cov_pub = rospy.Publisher("post_covariance", PlanarCovariance)
-        self.conf_serv = rospy.Service("get_ref_config", PlanarSystemService,
-                                       self.ref_config_service_handler)
         if rospy.has_param("robot_index"):
             self.robot_index = rospy.get_param("robot_index")
         else:
@@ -262,6 +256,11 @@ class System:
         # idle on startup:
         rospy.set_param("/operating_condition", 0)
 
+        # advertise service handler:
+        self.conf_serv = rospy.Service("get_ref_config", PlanarSystemService,
+                               self.ref_config_service_handler)
+
+
         return
 
 
@@ -288,6 +287,7 @@ class System:
         Return a reference configuration for the system by either
         index or time
         """
+        config = PlanarSystemConfig()
         if req.t != 0:
             # then use time, otherwise use the index
             try:
@@ -299,25 +299,33 @@ class System:
             if index > len(self.tref)-1:
                 rospy.logerr("Requested index is too large!")
                 return None
-            config = PlanarSystemConfig()
-            config.xm = self.Qref[index][0]
-            config.ym = self.Qref[index][1]
-            config.xr = self.Qref[index][2]
-            config.r  = self.Qref[index][3]
-            return {'config': config}
         else:
             # use the index:
             if req.index > len(self.tref)-1:
                 rospy.logerr("Requested index is too large!")
                 return None
-            else:
-                config = PlanarSystemConfig()
-                config.xm = self.Qref[req.index][0]
-                config.ym = self.Qref[req.index][1]
-                config.xr = self.Qref[req.index][2]
-                config.r  = self.Qref[req.index][3]
-                return {'config': config}
-        return None
+            index = req.index
+        config.xm = self.Qref[index][0]
+        config.ym = self.Qref[index][1]
+        config.xr = self.Qref[index][2]
+        config.r  = self.Qref[index][3]
+        config.header.frame_id = "/optimization_frame"
+        config.header.stamp = rospy.Time.now()
+        time = self.tref[index]
+        dt = self.dt
+        length = len(self.tref)
+        if index != len(self.tref)-1:
+            utmp = self.Uref[index]
+        else:
+            utmp = self.Uref[-1]
+        xtmp = self.Xref[index]
+        return {'config' : config,
+                'input' : utmp,
+                'state' : xtmp,
+                'dt' : dt,
+                'length' : length,
+                'time' : time,
+                'index' : index}
 
 
 
