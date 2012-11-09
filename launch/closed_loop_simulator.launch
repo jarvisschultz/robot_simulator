@@ -33,7 +33,7 @@
 	type="receding_planar_controller.py" output="screen" respawn="true"
 	args="-f $(arg dir)$(arg file)" if="$(arg receding)"/>
   <node pkg="robot_simulator" name="receding_optimizer"
-	type="receding_optimizer.py" output="screen" respawn="true"
+	type="receding_planar_optimizer.py" output="screen" respawn="true"
 	if="$(arg receding)"/>
   </group>
 
