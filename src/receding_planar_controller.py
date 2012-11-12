@@ -40,6 +40,9 @@ from puppeteer_msgs.msg import PlanarSystemConfig
 from puppeteer_msgs.msg import RobotCommands
 from puppeteer_msgs.srv import PlanarSystemService
 from puppeteer_msgs.msg import PlanarCovariance
+from puppeteer_msgs.msg import PlanarControlLaw
+from puppeteer_msgs.srv import PlanarControlLawService
+from puppeteer_msgs.srv import PlanarControlLawServiceRequest
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 import trep
@@ -259,8 +262,9 @@ class System:
         # advertise service handler:
         self.conf_serv = rospy.Service("get_ref_config", PlanarSystemService,
                                self.ref_config_service_handler)
-
-
+        rospy.wait_for_service("get_receding_controller", timeout=5)
+        self.get_receding_controller = rospy.ServiceProxy("get_receding_controller",
+                                                          PlanarControlLawService)
         return
 
 
@@ -363,6 +367,18 @@ class System:
         self.u1 = self.Xest2[2:4]
         self.u2 = self.Uref[self.k] + \
           matmult(self.Kproj[self.k], self.Xref[self.k]-self.Xest2)
+        # call the service to get the best current values for the controller
+        try:
+            req = PlanarControlLawServiceRequest(t=self.t1)
+            resp = self.get_receding_controller(req)
+            n = self.system.dsys.nX
+            utmp = np.array(resp.con.uff)
+            Ktmp = np.array([resp.con.K.data[0:n], resp.con.K.data[n:]])
+        except rospy.ServiceException, e:
+            print "Service did not process request: %s"%str(e)
+            utmp = self.Uref[self.k]
+            Ktmp = self.Kproj[self.k]
+        # print "U compare:",self.u1,utmp
         # now convert to a velocity and send out:
         ucom = (self.u2-self.u1)/self.dt
         com = RobotCommands()

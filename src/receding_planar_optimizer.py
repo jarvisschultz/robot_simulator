@@ -36,7 +36,6 @@ from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import MultiArrayDimension
 
-
 ## trep and misc.
 import trep
 from trep import tx, ty, tz, rx, ry, rz
@@ -50,6 +49,7 @@ import os
 import copy
 import time
 from scipy.interpolate import interp1d as spline
+import threading
 
 ## internal
 import receding_planar_controller as rp
