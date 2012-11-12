@@ -80,6 +80,7 @@ private:
     double *orig_len;
     geometry_msgs::Point Lengths, Lengths_nf;
     boost::array<double,36ul> kincov;
+    bool simulate_occlusions;
     
 
 public:
@@ -127,7 +128,17 @@ public:
 	    ROS_WARN("Robot index not set, using a default");
 	    ros::param::set("robot_index", 1);
 	    robot_index = 1;
-	}  
+	}
+
+	// do we actually need to simulate occlusions?
+	if (ros::param::has("simulate_occlusions_bool"))
+	    ros::param::get("simulate_occlusions_bool", simulate_occlusions);
+	else
+	{
+	    ROS_WARN("Simulating occlusions by default!");
+	    ros::param::set("simulate_occlusions_bool", true);
+	    simulate_occlusions = true;
+	}
 		
 	// initialize vars that need it:
 	running_flag = false;
@@ -222,38 +233,42 @@ public:
 
 	    // to simulate the effects of occlusions, let's
 	    // occasionally publish a pose with a huge covariance
-	    static unsigned int occlusion_cnt = 0;
-	    static bool occlusion_flag = false;
-	    static int occlusion_exit = rand()%50;
-	    static int occlusion_exit_cnt = 0;
-	    occlusion_cnt++;
-	    if (!(occlusion_cnt%OCCLUSION_LIMS) || occlusion_flag)
+	    if (simulate_occlusions)
 	    {
-		occlusion_exit_cnt++;
-		occlusion_flag = true;
-		boost::array<double,36ul> tmpcov;
-		for (int i=0; i<36; i++) 
-		    tmpcov[i] = kincov[i]*1000.0;
-		odom.pose.covariance = tmpcov;
-		odom.pose.pose.position.x = DEFAULT_ERR;
-		odom.pose.pose.position.y = DEFAULT_ERR;
-		odom.pose.pose.position.z = DEFAULT_ERR;
-		odom.pose.pose.orientation.w = 1;
-		odom.pose.pose.orientation.x = 0;
-		odom.pose.pose.orientation.y = 0;
-		odom.pose.pose.orientation.z = 0;
-
-		if  (occlusion_exit_cnt > occlusion_exit)
+		static unsigned int occlusion_cnt = 0;
+		static bool occlusion_flag = false;
+		static int occlusion_exit = rand()%50;
+		static int occlusion_exit_cnt = 0;
+		occlusion_cnt++;
+		if (!(occlusion_cnt%OCCLUSION_LIMS) || occlusion_flag)
 		{
-		    occlusion_flag = false;
-		    occlusion_exit_cnt = 0;
-		    occlusion_exit = rand()%50;
-		    occlusion_cnt = rand()%OCCLUSION_LIMS;
+		    occlusion_exit_cnt++;
+		    occlusion_flag = true;
+		    boost::array<double,36ul> tmpcov;
+		    for (int i=0; i<36; i++) 
+			tmpcov[i] = kincov[i]*1000.0;
+		    odom.pose.covariance = tmpcov;
+		    odom.pose.pose.position.x = DEFAULT_ERR;
+		    odom.pose.pose.position.y = DEFAULT_ERR;
+		    odom.pose.pose.position.z = DEFAULT_ERR;
+		    odom.pose.pose.orientation.w = 1;
+		    odom.pose.pose.orientation.x = 0;
+		    odom.pose.pose.orientation.y = 0;
+		    odom.pose.pose.orientation.z = 0;
+
+		    if  (occlusion_exit_cnt > occlusion_exit)
+		    {
+			occlusion_flag = false;
+			occlusion_exit_cnt = 0;
+			occlusion_exit = rand()%50;
+			occlusion_cnt = rand()%OCCLUSION_LIMS;
+		    }
 		}
+		else
+		    odom.pose.covariance = kincov;
 	    }
 	    else
 		odom.pose.covariance = kincov;
-	    
 	    pub.publish(odom);
 
 	    // now publish the noise-free version:
