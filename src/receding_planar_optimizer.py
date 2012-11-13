@@ -10,7 +10,7 @@ optimization problem and provides access to its version of the reference
 trajectory and its controller via services.
 
 SUBSCRIPTIONS:
-    - PlanarSystemConfig (filt_config)
+    - PlanarSystemState (filt_state)
 
 PUBLISHERS:
     - PlanarControlLaw (receding_controls)
@@ -27,6 +27,7 @@ import rospy
 import tf
 from puppeteer_msgs.msg import FullRobotState
 from puppeteer_msgs.msg import PlanarSystemConfig
+from puppeteer_msgs.msg import PlanarSystemState
 from puppeteer_msgs.msg import RobotCommands
 from puppeteer_msgs.srv import PlanarSystemService
 from puppeteer_msgs.srv import PlanarSystemServiceRequest
@@ -99,35 +100,83 @@ class RecedingOptimizer:
                                        PlanarControlLawService,
                                        self.control_service_handler)
         # define all subscribers:
-        self.filt_sub = rospy.Subscriber("filt_config", PlanarSystemConfig,
+        self.filt_sub = rospy.Subscriber("filt_state", PlanarSystemState,
                                          self.meascb)
-
         # define miscellaneous variables related to the receding horizon controller:
         self.system.create_dsys(np.array(self.tref))
-        # define the cost weights:
-        Qcost = np.diag([10000, 10000, 1, 1, 1000, 1000, 300, 300])
-        Rcost = np.diag([1, 1])
-        # Xtmp = np.array(copy.deepcopy(self.Xref))
-        # Utmp = np.array(copy.deepcopy(self.Uref))
-        cost = discopt.DCost(np.array(self.Xref), np.array(self.Uref), Qcost, Rcost)
-        optimizer = discopt.DOptimizer(self.system.dsys, cost)
+        # perform linearization about current trajectory so that I can give it
+        # to any service requesters:
+        self.K, self.A, self.B = self.system.dsys.calc_feedback_controller(
+            np.array(self.Xref), np.array(self.Uref), return_linearization=True)
 
-
+        # initialize all variables that are needed for the receding horizon
+        # optimization
+        self.Xfilt = []
+        self.first_flag = True
+        self.base_time = rospy.Time.from_sec(0)
+        self.Xfilt_len = 0
         # manually open up another thread that repeatedly performs the full
         # discrete optimization as fast as possible:
-        optimizer.optimize_ic = False
-        optimizer.first_method_iterations = 0
-        finished, X, U = optimizer.optimize(self.Xref, self.Uref, max_steps=90)
-        if not finished:
-            rospy.logwarn("Optimization failed!!!")
-        else:
-            # then we can get the new controller:
-            self.K, self.A, self.B = self.system.dsys.calc_feedback_controller(X, U,
-                                                        return_linearization=True)
-            self.Uref_new = U
-            self.Xref_new = X
+        self.lock = threading.Lock()
+        self.thread = threading.Thread(target=self.optimizer)
+        self.thread.start()
+        return
 
 
+
+    def optimizer(self):
+        """
+        This is a function that is given its own thread, and it will continually
+        build a new reference trajectory and re-optimize.
+        """
+        print("started the optimizer function in %s"%
+                       threading.currentThread().getName())
+        while not rospy.is_shutdown():
+            # print("started the optimizer function in %s"%
+            #                threading.currentThread().getName())
+            # print("lock status = %s"%self.lock.locked())
+            # first let's check if the length of the filtered vector is longer than
+            # the last time we did the optimization
+            with self.lock:
+                Xfilt_local = copy.deepcopy(self.Xfilt)
+                Xfilt_len_local = copy.deepcopy(self.Xfilt_len)
+                Xref_local = copy.deepcopy(self.Xref)
+                Uref_local = copy.deepcopy(self.Uref)
+            if len(Xfilt_local) > Xfilt_len_local:
+                with self.lock:
+                    self.Xfilt_len = len(Xfilt_local)
+            else:
+                rospy.logdebug("No new information for the optimization...")
+                rospy.sleep(1/30.)
+                continue
+
+            # if we got here, we can do a new optimization:
+            Qcost = np.diag([10000, 10000, 1, 1, 1000, 1000, 300, 300])
+            Rcost = np.diag([1, 1])
+            # build trajectories:
+            Xref = np.vstack((Xfilt_local, Xref_local[len(Xfilt_local):]))
+            Uref = Xref[1:,2:4]
+            cost = discopt.DCost(np.array(Xref), np.array(Uref), Qcost, Rcost)
+            # print("lock status = %s"%self.lock.locked())
+            with self.lock:
+                optimizer = discopt.DOptimizer(self.system.dsys, cost)
+            optimizer.optimize_ic = False
+            optimizer.descent_tolerance = 1e-3
+            optimizer.first_method_iterations = 0
+            # print Xref.shape, Uref.shape
+            finished, X, U = optimizer.optimize(np.array(Xref_local), np.array(Uref_local),
+                                                max_steps=90)
+            if not finished:
+                rospy.logwarn("Optimization failed!!!")
+                break
+            else:
+                # print("lock status = %s"%self.lock.locked())
+                with self.lock:
+                # then we can get the new controller:
+                    self.K, self.A, self.B = self.system.dsys.calc_feedback_controller(X, U,
+                                                            return_linearization=True)
+                    self.Uref = U
+                    self.Xref = X
         return
 
 
@@ -137,7 +186,22 @@ class RecedingOptimizer:
     # optimization thread.
     def meascb(self, data):
         rospy.logdebug("receding_optimizer entered its measurement callback")
+        if self.first_flag:
+            self.base_time = data.header.stamp
+            self.first_flag = False
 
+        Xtmp = [1]*self.system.dsys.nX
+        Xtmp[0] = data.xm
+        Xtmp[1] = data.ym
+        Xtmp[2] = data.xr
+        Xtmp[3] = data.r
+        Xtmp[4] = data.pxm
+        Xtmp[5] = data.pym
+        Xtmp[6] = data.vxr
+        Xtmp[7] = data.vr
+
+        with self.lock:
+            self.Xfilt.append(Xtmp)
         return
 
 
@@ -188,7 +252,7 @@ def main():
     Run the main loop, by instatiating a System class, and then
     calling ros.spin
     """
-    rospy.init_node('receding_optimizer', log_level=rospy.INFO)
+    rospy.init_node('receding_optimizer', log_level=rospy.DEBUG)
 
     try:
         sim = RecedingOptimizer()

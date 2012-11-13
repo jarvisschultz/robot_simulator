@@ -21,6 +21,7 @@ PUBLISHERS:
     - RobotCommands     (serial_commands)
     - Path (mass_ref_path)
     - PlanarCovariance (post_covariance)
+    - PlanarSystemState (filt_state)
 
 SERVICES:
     - PlanarSystemService (get_ref_config)
@@ -43,6 +44,7 @@ from puppeteer_msgs.msg import PlanarCovariance
 from puppeteer_msgs.msg import PlanarControlLaw
 from puppeteer_msgs.srv import PlanarControlLawService
 from puppeteer_msgs.srv import PlanarControlLawServiceRequest
+from puppeteer_msgs.msg import PlanarSystemState
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 import trep
@@ -197,6 +199,7 @@ class System:
         self.meas_sub = rospy.Subscriber("meas_config", PlanarSystemConfig,
                                          self.meascb)
         self.filt_pub = rospy.Publisher("filt_config", PlanarSystemConfig)
+        self.filt_state_pub = rospy.Publisher("filt_state", PlanarSystemState)
         self.ref_pub = rospy.Publisher("ref_config", PlanarSystemConfig)
         self.comm_pub = rospy.Publisher("serial_commands", RobotCommands)
         self.path_pub = rospy.Publisher("mass_ref_path", Path)
@@ -365,11 +368,9 @@ class System:
 
     def calc_send_controls(self):
         self.u1 = self.Xest2[2:4]
-        self.u2 = self.Uref[self.k] + \
-          matmult(self.Kproj[self.k], self.Xref[self.k]-self.Xest2)
         # call the service to get the best current values for the controller
         try:
-            req = PlanarControlLawServiceRequest(t=self.t1)
+            req = PlanarControlLawServiceRequest(index=self.k)
             resp = self.get_receding_controller(req)
             n = self.system.dsys.nX
             utmp = np.array(resp.con.uff)
@@ -378,7 +379,8 @@ class System:
             print "Service did not process request: %s"%str(e)
             utmp = self.Uref[self.k]
             Ktmp = self.Kproj[self.k]
-        # print "U compare:",self.u1,utmp
+        self.u2 = utmp + \
+          matmult(Ktmp, self.Xref[self.k]-self.Xest2)
         # now convert to a velocity and send out:
         ucom = (self.u2-self.u1)/self.dt
         com = RobotCommands()
@@ -523,6 +525,19 @@ class System:
         qest.xr = self.Xest2[2]
         qest.r  = self.Xest2[3]
         self.filt_pub.publish(qest)
+        # publish estimated state
+        xest = PlanarSystemState()
+        xest.header.stamp = data.header.stamp
+        xest.header.frame_id = data.header.frame_id
+        xest.xm = self.Xest2[0]
+        xest.ym = self.Xest2[1]
+        xest.xr = self.Xest2[2]
+        xest.r  = self.Xest2[3]
+        xest.pxm = self.Xest2[4]
+        xest.pym = self.Xest2[5]
+        xest.vxr = self.Xest2[6]
+        xest.vr  = self.Xest2[7]
+        self.filt_state_pub.publish(xest)
         # publish the reference pose:
         qest = PlanarSystemConfig()
         qest.header.stamp = data.header.stamp
