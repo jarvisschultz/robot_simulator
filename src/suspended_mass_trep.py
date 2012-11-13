@@ -173,7 +173,8 @@ class MassSimulator:
         rospy.loginfo("Starting mass_simulator node!")
 
         ## define a subscriber and callback for the robot_simulator
-        self.sub = rospy.Subscriber("robot_state", FullRobotState, self.inputcb)
+        self.sub = rospy.Subscriber("robot_state_noise_free", FullRobotState,
+                                    self.inputcb)
 
         ## define a publisher for the position of the mass:
         self.mass_pub = rospy.Publisher("mass_location", PointStamped)
@@ -267,7 +268,7 @@ class MassSimulator:
             operating = rospy.get_param("/operating_condition")
         else:
             return
-            
+
 
         # set string length
         self.len = data.left;
@@ -289,7 +290,7 @@ class MassSimulator:
             q = self.sys.get_current_configuration()
 
             ## now add the appropriate amount of noise:
-            q[0] += self.noise*np.random.normal()
+            q += self.noise*np.random.normal(0,1,(self.sys.sys.nQ))
             new_point = PointStamped()
             new_point.point.x = q[0]
             new_point.point.y = q[1]

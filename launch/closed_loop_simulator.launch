@@ -5,6 +5,8 @@
   <arg name="vis" default="true" />
   <arg name="index" value="1" />
   <arg name="receding" default="false" />
+  <arg name="freq" default="30.0" />
+  <arg name="window" default="3.0" />
 
   <!-- first let's add the static frame broadcaster that broadcasts frames in a default config -->
   <include file="$(find robot_simulator)/launch/default_calibration_frames.launch" />
@@ -34,6 +36,8 @@
     <node pkg="robot_simulator" name="receding_controller"
 	  type="receding_planar_controller.py" output="screen" respawn="true"
 	  args="-f $(arg dir)$(arg file)" if="$(arg receding)"/>
+    <param name="window_length" value="$(arg window)" type="double" 
+	   if="$(arg receding)"/>
     <node pkg="robot_simulator" name="receding_optimizer"
 	  type="receding_planar_optimizer.py" output="screen" respawn="true"
 	  if="$(arg receding)"/>

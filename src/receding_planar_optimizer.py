@@ -45,16 +45,18 @@ from math import sin, cos
 from math import pi as mpi
 import numpy as np
 import sys
-import scipy as sp
+import scipy.io as sio
 import os
 import copy
 import time
-from scipy.interpolate import interp1d as spline
 import threading
 
 ## internal
 import receding_planar_controller as rp
 
+## global constants:
+DTopt = 1/30.
+WINDOW = 3.0
 
 ## PRIMARY CLASS WITH CALLBACKS ##############################
 class RecedingOptimizer:
@@ -91,6 +93,9 @@ class RecedingOptimizer:
         resp = get_ref_config(req)
         self.Xref.append(resp.state)
         self.tref.append(resp.time)
+        self.Xref_original = copy.deepcopy(self.Xref)
+        self.tref_original = copy.deepcopy(self.tref)
+        self.Uref_original = copy.deepcopy(self.Uref)
         rospy.loginfo("Optimizer successfully received entire trajectory")
 
         # define all publishers:
@@ -129,8 +134,8 @@ class RecedingOptimizer:
         This is a function that is given its own thread, and it will continually
         build a new reference trajectory and re-optimize.
         """
-        print("started the optimizer function in %s"%
-                       threading.currentThread().getName())
+        rospy.loginfo("started the optimizer function in %s"%
+                      threading.currentThread().getName())
         while not rospy.is_shutdown():
             # print("started the optimizer function in %s"%
             #                threading.currentThread().getName())
@@ -142,6 +147,7 @@ class RecedingOptimizer:
                 Xfilt_len_local = copy.deepcopy(self.Xfilt_len)
                 Xref_local = copy.deepcopy(self.Xref)
                 Uref_local = copy.deepcopy(self.Uref)
+                dt_local = self.dt
             if len(Xfilt_local) > Xfilt_len_local:
                 with self.lock:
                     self.Xfilt_len = len(Xfilt_local)
@@ -149,10 +155,11 @@ class RecedingOptimizer:
                 rospy.logdebug("No new information for the optimization...")
                 rospy.sleep(1/30.)
                 continue
-
             # if we got here, we can do a new optimization:
             Qcost = np.diag([10000, 10000, 1, 1, 1000, 1000, 300, 300])
             Rcost = np.diag([1, 1])
+            def Qfunc(kf): return np.diag([10, 10, 1, 1, 1, 1, 1, 1])
+            def Rfunc(kf): return np.diag([1, 1])
             # build trajectories:
             Xref = np.vstack((Xfilt_local, Xref_local[len(Xfilt_local):]))
             Uref = Xref[1:,2:4]
@@ -164,19 +171,40 @@ class RecedingOptimizer:
             optimizer.descent_tolerance = 1e-3
             optimizer.first_method_iterations = 0
             # print Xref.shape, Uref.shape
-            finished, X, U = optimizer.optimize(np.array(Xref_local), np.array(Uref_local),
-                                                max_steps=90)
+            finished = False
+            try:
+                finished, X, U = optimizer.optimize(np.array(Xref_local), np.array(Uref_local),
+                                                    max_steps=90)
+            except:
+                rospy.logwarn("Detected optimization problem")
             if not finished:
                 rospy.logwarn("Optimization failed!!!")
-                break
+                pass
             else:
                 # print("lock status = %s"%self.lock.locked())
                 with self.lock:
                 # then we can get the new controller:
                     self.K, self.A, self.B = self.system.dsys.calc_feedback_controller(X, U,
-                                                            return_linearization=True)
+                                                Q=Qfunc, R=Rfunc, return_linearization=True)
                     self.Uref = U
                     self.Xref = X
+            if len(Xfilt_local) > 100:
+                print "Writing out optimization, and breaking optimization thread"
+                print "We have received a total of",len(Xfilt_local),"states"
+                dat = {}
+                with self.lock:
+                    dat['Xoriginal'] = self.Xref_original
+                    dat['Uoriginal'] = self.Uref_original
+                    dat['tref'] = self.tref_original
+                dat['Xcurrent'] = Xref
+                dat['Ucurrent'] = Uref
+                dat['Xfilt'] = Xfilt_local
+                dat['Xopt'] = X
+                dat['Uopt'] = U
+                fname = '/home/jarvis/Desktop/debug_data/receding_debug/data.mat'
+                sio.savemat(fname, dat, appendmat=False)
+                break
+        rospy.loginfo("Optimizer thread exiting")
         return
 
 
