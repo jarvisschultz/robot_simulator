@@ -41,7 +41,7 @@ from std_msgs.msg import MultiArrayDimension
 import trep
 from trep import tx, ty, tz, rx, ry, rz
 import trep.discopt as discopt
-from math import sin, cos
+from math import sin, cos, floor
 from math import pi as mpi
 import numpy as np
 import sys
@@ -57,6 +57,7 @@ import receding_planar_controller as rp
 ## global constants:
 DTopt = 1/30.
 WINDOW = 3.0
+OFFSET = 20
 
 ## PRIMARY CLASS WITH CALLBACKS ##############################
 class RecedingOptimizer:
@@ -120,6 +121,12 @@ class RecedingOptimizer:
         self.first_flag = True
         self.base_time = rospy.Time.from_sec(0)
         self.Xfilt_len = 0
+        if rospy.has_param("window_length"):
+            self.window_length = rospy.get_param("window_length")
+        else:
+            self.window_length = WINDOW
+            rospy.set_param("window_length", self.window_length)
+        self.optimization_length = int(floor(self.window_length/self.dt))
         # manually open up another thread that repeatedly performs the full
         # discrete optimization as fast as possible:
         self.lock = threading.Lock()
@@ -134,12 +141,9 @@ class RecedingOptimizer:
         This is a function that is given its own thread, and it will continually
         build a new reference trajectory and re-optimize.
         """
-        rospy.loginfo("started the optimizer function in %s"%
+        rospy.loginfo("Started the optimizer function in %s"%
                       threading.currentThread().getName())
         while not rospy.is_shutdown():
-            # print("started the optimizer function in %s"%
-            #                threading.currentThread().getName())
-            # print("lock status = %s"%self.lock.locked())
             # first let's check if the length of the filtered vector is longer than
             # the last time we did the optimization
             with self.lock:
@@ -147,48 +151,66 @@ class RecedingOptimizer:
                 Xfilt_len_local = copy.deepcopy(self.Xfilt_len)
                 Xref_local = copy.deepcopy(self.Xref)
                 Uref_local = copy.deepcopy(self.Uref)
-                dt_local = self.dt
-            if len(Xfilt_local) > Xfilt_len_local:
+                tref_local = copy.deepcopy(self.tref)
+                oplen_local = copy.deepcopy(self.optimization_length)
+                A_local = copy.deepcopy(self.A)
+                B_local = copy.deepcopy(self.B)
+                K_local = copy.deepcopy(self.K)
+            if len(Xfilt_local) > Xfilt_len_local+OFFSET:
                 with self.lock:
                     self.Xfilt_len = len(Xfilt_local)
             else:
                 rospy.logdebug("No new information for the optimization...")
                 rospy.sleep(1/30.)
                 continue
+            kindex = len(Xfilt_local)-OFFSET
+            with self.lock:
+                self.system.create_dsys(tref_local[kindex:kindex+oplen_local])
             # if we got here, we can do a new optimization:
             Qcost = np.diag([10000, 10000, 1, 1, 1000, 1000, 300, 300])
             Rcost = np.diag([1, 1])
             def Qfunc(kf): return np.diag([10, 10, 1, 1, 1, 1, 1, 1])
             def Rfunc(kf): return np.diag([1, 1])
             # build trajectories:
-            Xref = np.vstack((Xfilt_local, Xref_local[len(Xfilt_local):]))
+            Xref = np.vstack((Xfilt_local[-OFFSET:],
+                              Xref_local[kindex+OFFSET:kindex+oplen_local]))
             Uref = Xref[1:,2:4]
             cost = discopt.DCost(np.array(Xref), np.array(Uref), Qcost, Rcost)
-            # print("lock status = %s"%self.lock.locked())
             with self.lock:
                 optimizer = discopt.DOptimizer(self.system.dsys, cost)
             optimizer.optimize_ic = False
             optimizer.descent_tolerance = 1e-3
             optimizer.first_method_iterations = 0
-            # print Xref.shape, Uref.shape
             finished = False
+            print np.array(tref_local[kindex:kindex+oplen_local]).shape
+            print Xref.shape, (np.array(Xref_local[kindex:kindex+oplen_local])).shape
+            print Uref.shape, (np.array(Uref_local[kindex:kindex+oplen_local-1])).shape
             try:
-                finished, X, U = optimizer.optimize(np.array(Xref_local), np.array(Uref_local),
+                finished, X, U = optimizer.optimize(0.9*np.array(Xref_local[kindex:kindex+oplen_local]),
+                                                    0.9*np.array(Uref_local[kindex:kindex+oplen_local-1]),
                                                     max_steps=90)
-            except:
-                rospy.logwarn("Detected optimization problem")
+            except trep.ConvergenceError as e:
+                rospy.logwarn("Detected optimization problem: %s",e.message)
             if not finished:
                 rospy.logwarn("Optimization failed!!!")
                 pass
             else:
-                # print("lock status = %s"%self.lock.locked())
                 with self.lock:
+                    pass
                 # then we can get the new controller:
-                    self.K, self.A, self.B = self.system.dsys.calc_feedback_controller(X, U,
-                                                Q=Qfunc, R=Rfunc, return_linearization=True)
-                    self.Uref = U
-                    self.Xref = X
-            if len(Xfilt_local) > 100:
+                    # K, A, B = self.system.dsys.calc_feedback_controller(X, U,
+                    #                             Q=Qfunc, R=Rfunc, return_linearization=True)
+                    # Utmp = np.vstack((Uref_local[0:kindex], U, Uref_local[kindex+oplen_local:]))
+                    # Xtmp = np.vstack((Xref_local[0:kindex], X, Xref_local[kindex+oplen_local:]))
+                    # Atmp = np.vstack((A_local[0:kindex], A, A_local[kindex+oplen_local:]))
+                    # Btmp = np.vstack((B_local[0:kindex], B, B_local[kindex+oplen_local:]))
+                    # Ktmp = np.vstack((K_local[0:kindex], K, K_local[kindex+oplen_local:]))
+                    # self.Xref = Xtmp
+                    # self.Uref = Utmp
+                    # self.A = Atmp
+                    # self.B = Btmp
+                    # self.K = Ktmp
+            if len(Xfilt_local) > 160:
                 print "Writing out optimization, and breaking optimization thread"
                 print "We have received a total of",len(Xfilt_local),"states"
                 dat = {}
@@ -199,8 +221,13 @@ class RecedingOptimizer:
                 dat['Xcurrent'] = Xref
                 dat['Ucurrent'] = Uref
                 dat['Xfilt'] = Xfilt_local
-                dat['Xopt'] = X
-                dat['Uopt'] = U
+                dat['X0'] = np.array(Xref_local[kindex:kindex+oplen_local])
+                dat['U0'] = np.array(Uref_local[kindex:kindex+oplen_local-1])
+                dat['kindex'] = kindex
+                dat['offset'] = OFFSET
+                dat['oplen'] = oplen_local
+                # dat['Xopt'] = X
+                # dat['Uopt'] = U
                 fname = '/home/jarvis/Desktop/debug_data/receding_debug/data.mat'
                 sio.savemat(fname, dat, appendmat=False)
                 break
