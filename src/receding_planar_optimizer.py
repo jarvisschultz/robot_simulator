@@ -54,6 +54,10 @@ import threading
 ## internal
 import receding_planar_controller as rp
 
+from matplotlib.pyplot import hold, plot
+import matplotlib.pyplot as mp
+
+
 ## global constants:
 DTopt = 1/30.
 WINDOW = 3.0
@@ -97,6 +101,14 @@ class RecedingOptimizer:
         self.Xref_original = copy.deepcopy(self.Xref)
         self.tref_original = copy.deepcopy(self.tref)
         self.Uref_original = copy.deepcopy(self.Uref)
+        # hold(True)
+        # mp.plot(self.tref, np.array(self.Xref_original)[:,0:], lw=2)
+        # hold(False)
+        # mp.show()
+        # mp.cla()
+        # mp.clf()
+        # mp.close()
+
         rospy.loginfo("Optimizer successfully received entire trajectory")
 
         # define all publishers:
@@ -230,6 +242,14 @@ class RecedingOptimizer:
                 # dat['Uopt'] = U
                 fname = '/home/jarvis/Desktop/debug_data/receding_debug/data.mat'
                 sio.savemat(fname, dat, appendmat=False)
+                # hold(True)
+                # mp.plot(self.tref, np.array(self.Xref_original)[:,0:], lw=2)
+                # hold(False)
+                # mp.show()
+                # mp.cla()
+                # mp.clf()
+                # mp.close()
+
                 break
         rospy.loginfo("Optimizer thread exiting")
         return

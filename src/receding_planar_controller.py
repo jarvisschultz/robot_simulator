@@ -549,8 +549,6 @@ class System:
         self.ref_pub.publish(qest)
         return
 
-
-
     # define the callback function for the estimate out of the kinect
     def meascb(self, data):
         rospy.logdebug("measurement callback triggered")
