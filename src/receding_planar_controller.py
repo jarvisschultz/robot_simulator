@@ -190,7 +190,7 @@ class System:
         rospy.loginfo("Successfully found linearization and feedback law")
 
         # now we can define our filter parameters:
-        self.meas_cov = np.diag((0.5,0.5,0.5,0.5,0.75,0.75,0.75,0.75)) # measurement covariance
+        self.meas_cov = np.diag((0.5,0.5,0.5,0.5,1000,1000,1000,1000)) # measurement covariance
         self.proc_cov = np.diag((0.1,0.1,0.1,0.1,0.15,0.15,0.15,0.15)) # process covariance
         self.est_cov = copy.deepcopy(self.meas_cov) # estimate covariance
 

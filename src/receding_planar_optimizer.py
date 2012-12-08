@@ -60,7 +60,7 @@ import matplotlib.pyplot as mp
 
 ## global constants:
 DTopt = 1/30.
-WINDOW = 3.0
+WINDOW = 1.0
 OFFSET = 20
 
 ## PRIMARY CLASS WITH CALLBACKS ##############################
@@ -101,13 +101,6 @@ class RecedingOptimizer:
         self.Xref_original = copy.deepcopy(self.Xref)
         self.tref_original = copy.deepcopy(self.tref)
         self.Uref_original = copy.deepcopy(self.Uref)
-        # hold(True)
-        # mp.plot(self.tref, np.array(self.Xref_original)[:,0:], lw=2)
-        # hold(False)
-        # mp.show()
-        # mp.cla()
-        # mp.clf()
-        # mp.close()
 
         rospy.loginfo("Optimizer successfully received entire trajectory")
 
@@ -193,13 +186,19 @@ class RecedingOptimizer:
             optimizer.optimize_ic = False
             optimizer.descent_tolerance = 1e-3
             optimizer.first_method_iterations = 0
+            optimizer.descent_tolerance = 0.1
+            optimizer.armijo_beta = 0.99
             finished = False
-            print np.array(tref_local[kindex:kindex+oplen_local]).shape
-            print Xref.shape, (np.array(Xref_local[kindex:kindex+oplen_local])).shape
-            print Uref.shape, (np.array(Uref_local[kindex:kindex+oplen_local-1])).shape
+            # print np.array(tref_local[kindex:kindex+oplen_local]).shape
+            # print Xref.shape, (np.array(Xref_local[kindex:kindex+oplen_local])).shape
+            # print Uref.shape, (np.array(Uref_local[kindex:kindex+oplen_local-1])).shape
+            # build initial guesses:
+            X0 = np.array(copy.deepcopy(Xref_local)[kindex:kindex+oplen_local])
+            U0 = np.array(copy.deepcopy(Uref_local)[kindex:kindex+oplen_local-1])
+            (Xp,Up) = self.system.dsys.project(X0,U0)
             try:
-                finished, X, U = optimizer.optimize(0.9*np.array(Xref_local[kindex:kindex+oplen_local]),
-                                                    0.9*np.array(Uref_local[kindex:kindex+oplen_local-1]),
+                finished, X, U = optimizer.optimize(Xp,
+                                                    Up,
                                                     max_steps=90)
             except trep.ConvergenceError as e:
                 rospy.logwarn("Detected optimization problem: %s",e.message)
@@ -209,7 +208,7 @@ class RecedingOptimizer:
             else:
                 with self.lock:
                     pass
-                # then we can get the new controller:
+                    # # then we can get the new controller:
                     # K, A, B = self.system.dsys.calc_feedback_controller(X, U,
                     #                             Q=Qfunc, R=Rfunc, return_linearization=True)
                     # Utmp = np.vstack((Uref_local[0:kindex], U, Uref_local[kindex+oplen_local:]))
@@ -217,12 +216,12 @@ class RecedingOptimizer:
                     # Atmp = np.vstack((A_local[0:kindex], A, A_local[kindex+oplen_local:]))
                     # Btmp = np.vstack((B_local[0:kindex], B, B_local[kindex+oplen_local:]))
                     # Ktmp = np.vstack((K_local[0:kindex], K, K_local[kindex+oplen_local:]))
-                    # self.Xref = Xtmp
-                    # self.Uref = Utmp
-                    # self.A = Atmp
-                    # self.B = Btmp
-                    # self.K = Ktmp
-            if len(Xfilt_local) > 160:
+                    # self.Xref = Xtmp.copy()
+                    # self.Uref = Utmp.copy()
+                    # self.A = Atmp.copy()
+                    # self.B = Btmp.copy()
+                    # self.K = Ktmp.copy()
+            if len(Xfilt_local) > 50:
                 print "Writing out optimization, and breaking optimization thread"
                 print "We have received a total of",len(Xfilt_local),"states"
                 dat = {}
@@ -242,13 +241,16 @@ class RecedingOptimizer:
                 # dat['Uopt'] = U
                 fname = '/home/jarvis/Desktop/debug_data/receding_debug/data.mat'
                 sio.savemat(fname, dat, appendmat=False)
-                # hold(True)
-                # mp.plot(self.tref, np.array(self.Xref_original)[:,0:], lw=2)
-                # hold(False)
-                # mp.show()
-                # mp.cla()
-                # mp.clf()
-                # mp.close()
+                hold(True)
+                mp.plot(tref_local, np.array(self.Xref_original)[:,4:],'k-',lw=2)
+                mp.plot(tref_local[kindex:kindex+oplen_local], np.array(Xref)[:,4:],'r-*',lw=2)
+                mp.plot(tref_local[0:len(Xfilt_local)], np.array(Xfilt_local)[:,4:],'b-',lw=2)
+                hold(False)
+                mp.show()
+                mp.cla()
+                mp.clf()
+                mp.close()
+
 
                 break
         rospy.loginfo("Optimizer thread exiting")
