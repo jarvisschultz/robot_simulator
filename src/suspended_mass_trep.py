@@ -172,6 +172,26 @@ class MassSimulator:
     def __init__(self):
         rospy.loginfo("Starting mass_simulator node!")
 
+        ## define a transform listener for publishing the transforms
+        ## to the location of the mass
+        self.br = tf.TransformBroadcaster()
+        self.listener = tf.TransformListener()
+        ## wait for transform:
+        try:
+            now = rospy.Time.now()
+            self.listener.waitForTransform("/optimization_frame", "/map",
+                                           now, rospy.Duration(3.0))
+        except (tf.Exception):
+            rospy.logwarn("Could not find transform to optimization_frame after waiting!")
+
+
+        ## define the system that we will use to integrate the dynamics
+        self.sys = MassSystem3D()
+        self.initialized_flag = False
+        ## set base time
+        self.last_time = rospy.rostime.get_rostime()
+        self.len = h0
+
         ## define a subscriber and callback for the robot_simulator
         self.sub = rospy.Subscriber("robot_state_noise_free", FullRobotState,
                                     self.inputcb)
@@ -182,19 +202,6 @@ class MassSimulator:
         ## define a publisher for publishing the 2D results of the
         ## simulation
         self.plan_pub = rospy.Publisher("meas_config", PlanarSystemConfig)
-
-        ## define a transform listener for publishing the transforms
-        ## to the location of the mass
-        self.br = tf.TransformBroadcaster()
-        self.listener = tf.TransformListener()
-
-        ## define the system that we will use to integrate the dynamics
-        self.sys = MassSystem3D()
-        self.initialized_flag = False
-
-        ## set base time
-        self.last_time = rospy.rostime.get_rostime()
-        self.len = h0
 
         ## get noise value:
         if rospy.has_param("/simulator_noise"):

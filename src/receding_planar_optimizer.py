@@ -61,7 +61,7 @@ import matplotlib.pyplot as mp
 ## global constants:
 DTopt = 1/30.
 WINDOW = 1.0
-OFFSET = 20
+OFFSET = 10
 
 ## PRIMARY CLASS WITH CALLBACKS ##############################
 class RecedingOptimizer:
@@ -172,7 +172,7 @@ class RecedingOptimizer:
             with self.lock:
                 self.system.create_dsys(tref_local[kindex:kindex+oplen_local])
             # if we got here, we can do a new optimization:
-            Qcost = np.diag([10000, 10000, 1, 1, 1000, 1000, 300, 300])
+            Qcost = np.diag([10000, 10000, 1, 1, 1, 1, 50000, 50000])
             Rcost = np.diag([1, 1])
             def Qfunc(kf): return np.diag([10, 10, 1, 1, 1, 1, 1, 1])
             def Rfunc(kf): return np.diag([1, 1])
@@ -184,9 +184,8 @@ class RecedingOptimizer:
             with self.lock:
                 optimizer = discopt.DOptimizer(self.system.dsys, cost)
             optimizer.optimize_ic = False
-            optimizer.descent_tolerance = 1e-3
+            optimizer.descent_tolerance = 1e-1
             optimizer.first_method_iterations = 0
-            optimizer.descent_tolerance = 0.1
             optimizer.armijo_beta = 0.99
             finished = False
             # print np.array(tref_local[kindex:kindex+oplen_local]).shape
@@ -208,19 +207,20 @@ class RecedingOptimizer:
             else:
                 with self.lock:
                     pass
-                    # # then we can get the new controller:
-                    # K, A, B = self.system.dsys.calc_feedback_controller(X, U,
-                    #                             Q=Qfunc, R=Rfunc, return_linearization=True)
-                    # Utmp = np.vstack((Uref_local[0:kindex], U, Uref_local[kindex+oplen_local:]))
-                    # Xtmp = np.vstack((Xref_local[0:kindex], X, Xref_local[kindex+oplen_local:]))
-                    # Atmp = np.vstack((A_local[0:kindex], A, A_local[kindex+oplen_local:]))
-                    # Btmp = np.vstack((B_local[0:kindex], B, B_local[kindex+oplen_local:]))
-                    # Ktmp = np.vstack((K_local[0:kindex], K, K_local[kindex+oplen_local:]))
-                    # self.Xref = Xtmp.copy()
-                    # self.Uref = Utmp.copy()
-                    # self.A = Atmp.copy()
-                    # self.B = Btmp.copy()
-                    # self.K = Ktmp.copy()
+                    # then we can get the new controller:
+                    K, A, B = self.system.dsys.calc_feedback_controller(X, U,
+                                                Q=Qfunc, R=Rfunc, return_linearization=True)
+                    Utmp = np.vstack((Uref_local[0:kindex], U, Uref_local[kindex+oplen_local-1:]))
+                    Xtmp = np.vstack((Xref_local[0:kindex], X, Xref_local[kindex+oplen_local:]))
+                    Atmp = np.vstack((A_local[0:kindex], A, A_local[kindex+oplen_local:]))
+                    Btmp = np.vstack((B_local[0:kindex], B, B_local[kindex+oplen_local:]))
+                    Ktmp = np.vstack((K_local[0:kindex], K, K_local[kindex+oplen_local:]))
+                    self.Xref = Xtmp.copy()
+                    self.Uref = Utmp.copy()
+                    self.A = Atmp.copy()
+                    self.B = Btmp.copy()
+                    self.K = Ktmp.copy()
+
             if len(Xfilt_local) > 50:
                 print "Writing out optimization, and breaking optimization thread"
                 print "We have received a total of",len(Xfilt_local),"states"
@@ -242,17 +242,31 @@ class RecedingOptimizer:
                 fname = '/home/jarvis/Desktop/debug_data/receding_debug/data.mat'
                 sio.savemat(fname, dat, appendmat=False)
                 hold(True)
-                mp.plot(tref_local, np.array(self.Xref_original)[:,4:],'k-',lw=2)
-                mp.plot(tref_local[kindex:kindex+oplen_local], np.array(Xref)[:,4:],'r-*',lw=2)
-                mp.plot(tref_local[0:len(Xfilt_local)], np.array(Xfilt_local)[:,4:],'b-',lw=2)
+                # l1 = mp.plot(tref_local, np.array(self.Xref_original)[:,0:],'k-',lw=2)
+                # l2 = mp.plot(tref_local[kindex:kindex+oplen_local], np.array(Xref)[:,0:],'r-*',lw=2)
+                # l3 = mp.plot(tref_local[0:len(Xfilt_local)], np.array(Xfilt_local)[:,0:],'b-',lw=2)
+                # l4 = mp.plot(tref_local[kindex:kindex+oplen_local], np.array(X)[:,0:]+0.01, 'g:',lw=2)
+                # l5 = mp.plot(tref_local, np.array(Xtmp)[:,0:]+.01,'m--',lw=2)
+                # mp.legend((l1[0],l2[0],l3[0],l4[0],l5[0]), ("Original Reference",
+                #                                             "Optimization Reference",
+                #                                             "Filtered Data",
+                #                                             "Optimal Solution",
+                #                                             "Stitched Solution"),
+                #                                             loc='lower right')
+                l1 = mp.plot(tref_local[0:-1], np.array(self.Uref_original)[:,0:],'ko',lw=2)
+                l2 = mp.plot(tref_local[kindex:kindex+oplen_local-1], np.array(U)[:,0:],'r-*',lw=2)
+                l3 = mp.plot(tref_local[0:-1], np.array(Utmp)[:,0:],'mx',lw=2)
+                mp.legend((l1[0],l2[0],l3[0]), ("Original Input",
+                                                "Optimal Solution",
+                                                "Stitched Input"))
+                # mp.xlim([tref_local[kindex-10], tref_local[kindex+oplen_local+10]])
                 hold(False)
                 mp.show()
                 mp.cla()
                 mp.clf()
                 mp.close()
-
-
                 break
+
         rospy.loginfo("Optimizer thread exiting")
         return
 
