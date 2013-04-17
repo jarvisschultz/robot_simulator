@@ -10,7 +10,8 @@
   
 
   <!-- load serial node dictionary -->
-  <rosparam file="$(find serial_node)/data/serial_device_dict.xml" command="load"/>
+  <rosparam file="$(find serial_node)/data/closed_loop_controller_serial_device_dict.xml" 
+	    command="load"/>
 
   <!-- start up robot, controller, estimator, etc. -->
   <arg name="rn" value="robot_1" />
