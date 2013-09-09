@@ -61,7 +61,7 @@ import matplotlib.pyplot as mp
 ## global constants:
 DTopt = 1/30.
 WINDOW = 1.0
-OFFSET = 10
+OFFSET = 1
 
 ## PRIMARY CLASS WITH CALLBACKS ##############################
 class RecedingOptimizer:
@@ -172,29 +172,53 @@ class RecedingOptimizer:
             with self.lock:
                 self.system.create_dsys(tref_local[kindex:kindex+oplen_local])
             # if we got here, we can do a new optimization:
-            Qcost = np.diag([10000, 10000, 1, 1, 1, 1, 50000, 50000])
-            Rcost = np.diag([1, 1])
-            def Qfunc(kf): return np.diag([10, 10, 1, 1, 1, 1, 1, 1])
-            def Rfunc(kf): return np.diag([1, 1])
+            Qcost = np.diag([100000, 100000, 0.1, 0.1, 0.1, 0.1, 3000, 3000])
+            Rcost = np.diag([0.1, 0.1])
+            def Qfunc(kf): return Qcost
+            def Rfunc(kf): return Rcost
             # build trajectories:
             Xref = np.vstack((Xfilt_local[-OFFSET:],
                               Xref_local[kindex+OFFSET:kindex+oplen_local]))
             Uref = Xref[1:,2:4]
+            # Xref = np.vstack((Xref_local[-OFFSET:],
+            #                   Xref_local[kindex+OFFSET:kindex+oplen_local]))
+            # Uref = Xref[1:,2:4]
+            # print "offset = ",OFFSET,"kindex = ",kindex,"oplen = ",oplen_local,"len(Xref) = ",len(Xref)
+
+            # build initial guesses:
+            # X0 = np.array(copy.deepcopy(Xref_local)[kindex:kindex+oplen_local])
+            # U0 = np.array(copy.deepcopy(Uref_local)[kindex:kindex+oplen_local-1])
+            # (Xp,Up) = self.system.dsys.project(X0,U0)
+            # Xp = copy.deepcopy(X0)
+            # Up = copy.deepcopy(U0)
+            X0 = np.array(copy.deepcopy(Xref))
+            U0 = np.array(copy.deepcopy(Uref))
+            self.system.sys.q = X0[0,0:4]
+            self.system.sys.satisfy_constraints(keep_kinematic=True)
+            Xp = np.zeros(X0.shape)
+            Up = copy.deepcopy(U0)
+            Xp[0] = X0[0]
+            Xp[0,0:4] = self.system.sys.q
+            self.system.dsys.set(Xp[0], Up[0], 0)
+            for u in Up[1:]:
+                Xp[self.system.dsys.k+1] = self.system.dsys.f()
+                self.system.dsys.step(u)
+            Xp[-1] = self.system.dsys.f()
+            
+            # zero kinematic velocity inputs
+            Xref[:,6:8] *= 0
             cost = discopt.DCost(np.array(Xref), np.array(Uref), Qcost, Rcost)
             with self.lock:
                 optimizer = discopt.DOptimizer(self.system.dsys, cost)
             optimizer.optimize_ic = False
-            optimizer.descent_tolerance = 1e-1
+            optimizer.descent_tolerance = 1e-8
             optimizer.first_method_iterations = 0
             optimizer.armijo_beta = 0.99
             finished = False
             # print np.array(tref_local[kindex:kindex+oplen_local]).shape
             # print Xref.shape, (np.array(Xref_local[kindex:kindex+oplen_local])).shape
             # print Uref.shape, (np.array(Uref_local[kindex:kindex+oplen_local-1])).shape
-            # build initial guesses:
-            X0 = np.array(copy.deepcopy(Xref_local)[kindex:kindex+oplen_local])
-            U0 = np.array(copy.deepcopy(Uref_local)[kindex:kindex+oplen_local-1])
-            (Xp,Up) = self.system.dsys.project(X0,U0)
+
             try:
                 finished, X, U = optimizer.optimize(Xp,
                                                     Up,
@@ -214,14 +238,14 @@ class RecedingOptimizer:
                     Xtmp = np.vstack((Xref_local[0:kindex], X, Xref_local[kindex+oplen_local:]))
                     Atmp = np.vstack((A_local[0:kindex], A, A_local[kindex+oplen_local:]))
                     Btmp = np.vstack((B_local[0:kindex], B, B_local[kindex+oplen_local:]))
-                    Ktmp = np.vstack((K_local[0:kindex], K, K_local[kindex+oplen_local:]))
+                    Ktmp = np.vstack((K_local[0:kindex], K, K_local[kindex+oplen_local-1:]))
                     self.Xref = Xtmp.copy()
                     self.Uref = Utmp.copy()
                     self.A = Atmp.copy()
                     self.B = Btmp.copy()
                     self.K = Ktmp.copy()
 
-            if len(Xfilt_local) > 50:
+            if len(Xfilt_local) > 3 and finished:
                 print "Writing out optimization, and breaking optimization thread"
                 print "We have received a total of",len(Xfilt_local),"states"
                 dat = {}
@@ -239,26 +263,26 @@ class RecedingOptimizer:
                 dat['oplen'] = oplen_local
                 # dat['Xopt'] = X
                 # dat['Uopt'] = U
-                fname = '/home/jarvis/Desktop/debug_data/receding_debug/data.mat'
+                fname = '/home/jarvis/Desktop/misc/debug_data/receding_debug/data.mat'
                 sio.savemat(fname, dat, appendmat=False)
                 hold(True)
-                # l1 = mp.plot(tref_local, np.array(self.Xref_original)[:,0:],'k-',lw=2)
-                # l2 = mp.plot(tref_local[kindex:kindex+oplen_local], np.array(Xref)[:,0:],'r-*',lw=2)
-                # l3 = mp.plot(tref_local[0:len(Xfilt_local)], np.array(Xfilt_local)[:,0:],'b-',lw=2)
-                # l4 = mp.plot(tref_local[kindex:kindex+oplen_local], np.array(X)[:,0:]+0.01, 'g:',lw=2)
-                # l5 = mp.plot(tref_local, np.array(Xtmp)[:,0:]+.01,'m--',lw=2)
-                # mp.legend((l1[0],l2[0],l3[0],l4[0],l5[0]), ("Original Reference",
-                #                                             "Optimization Reference",
-                #                                             "Filtered Data",
-                #                                             "Optimal Solution",
-                #                                             "Stitched Solution"),
-                #                                             loc='lower right')
-                l1 = mp.plot(tref_local[0:-1], np.array(self.Uref_original)[:,0:],'ko',lw=2)
-                l2 = mp.plot(tref_local[kindex:kindex+oplen_local-1], np.array(U)[:,0:],'r-*',lw=2)
-                l3 = mp.plot(tref_local[0:-1], np.array(Utmp)[:,0:],'mx',lw=2)
-                mp.legend((l1[0],l2[0],l3[0]), ("Original Input",
-                                                "Optimal Solution",
-                                                "Stitched Input"))
+                l1 = mp.plot(tref_local, np.array(self.Xref_original)[:,0:4],'k-',lw=2)
+                l2 = mp.plot(tref_local[kindex:kindex+oplen_local], np.array(Xref)[:,0:4],'r-*',lw=2)
+                l3 = mp.plot(tref_local[0:len(Xfilt_local)], np.array(Xfilt_local)[:,0:4],'b-',lw=2)
+                l4 = mp.plot(tref_local[kindex:kindex+oplen_local], np.array(X)[:,0:4], 'g:',lw=2)
+                l5 = mp.plot(tref_local, np.array(Xtmp)[:,0:4],'m--',lw=2)
+                mp.legend((l1[0],l2[0],l3[0],l4[0],l5[0]), ("Original Reference",
+                                                            "Optimization Reference",
+                                                            "Filtered Data",
+                                                            "Optimal Solution",
+                                                            "Stitched Solution"),
+                                                            loc='lower right')
+                # l1 = mp.plot(tref_local[0:-1], np.array(self.Uref_original)[:,0:],'ko',lw=2)
+                # l2 = mp.plot(tref_local[kindex:kindex+oplen_local-1], np.array(U)[:,0:],'r-*',lw=2)
+                # l3 = mp.plot(tref_local[0:-1], np.array(Utmp)[:,0:],'mx',lw=2)
+                # mp.legend((l1[0],l2[0],l3[0]), ("Original Input",
+                #                                 "Optimal Solution",
+                #                                 "Stitched Input"))
                 # mp.xlim([tref_local[kindex-10], tref_local[kindex+oplen_local+10]])
                 hold(False)
                 mp.show()
@@ -320,6 +344,7 @@ class RecedingOptimizer:
                 rospy.logerr("Requested index is too large!")
                 return None
             index = req.index
+        # print "index = ",index, "len(K) = ",len(self.K), "len(X) = ",len(self.Xref),"len(Uref) = ", len(self.Uref)
         kkey = np.ravel(self.K[index]).tolist()
         uffkey = self.Uref[index]
         con.header.frame_id = "/optimization_frame"
@@ -343,7 +368,7 @@ def main():
     Run the main loop, by instatiating a System class, and then
     calling ros.spin
     """
-    rospy.init_node('receding_optimizer', log_level=rospy.DEBUG)
+    rospy.init_node('receding_optimizer', log_level=rospy.INFO)
 
     try:
         sim = RecedingOptimizer()

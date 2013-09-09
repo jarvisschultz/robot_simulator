@@ -47,7 +47,7 @@
   <param name="robot_index" value="$(arg index)" />
   <node pkg="keyboard_node" type="multi_keyboard_node"
 	name="keyboard_interface" output="screen" respawn="true"
-	launch-prefix="xterm -rv -e" />
+	launch-prefix="xterm -e" />
 
   <!-- start up rviz unless visualization is set to false -->
   <group if="$(arg vis)">
