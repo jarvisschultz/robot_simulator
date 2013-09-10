@@ -1,22 +1,20 @@
 #!/usr/bin/env python
 """
 Jarvis Schultz
-November 2012
+September 2013
 
-This program subscribes to the output of an EKF published by
-receding_planar_controller.py.  It builds its own local copies of the complete
-system trajectory.  Then as the system is running, it repeatedly re-solves the
-optimization problem and provides access to its version of the reference
-trajectory and its controller via services.
+This program offers a service to receding_planar_controller.py.  In the service
+handler, we request the desired state of the system at the next dt.  Then we
+perform a full trajectory optimization and reply with the appropriate controls
+to send to the system.
 
 SUBSCRIPTIONS:
-    - PlanarSystemState (filt_state)
 
 PUBLISHERS:
     - PlanarControlLaw (receding_controls)
 
 SERVICES:
-    - PlanarSystemService (get_receding_config) (client)
+    - PlanarSystemService (get_receding_state) (client)
     - PlanarControlLawService (get_receding_controller) (provider)
 
 """

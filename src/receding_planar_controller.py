@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 """
 Jarvis Schultz
-November 2012
+September 2013
 
 This program implements a full closed-loop receding horizon controller plus EKF
 estimator for the planar mass system.  Every time a new measurement is received,
 the estimator produces a new estimate for the full state of the system.  A
-different node combines the history of states with the original reference
-trajectory, and re-runs the discrete optimization using the original optimal
-solution as the initial guess.  Once the optimization is complete, a new
-trajectory is available...
-        ##### Should I access with a service or a topic? ######
+different node offers a service that performs a nonlinear trajectory
+optimization to take the system from our current best-estimate of the state to
+the reference state at the next time step, it returns the appropriate control to
+send to the system.
+
 
 SUBSCRIPTIONS:
     - PlanarSystemConfig (meas_config)
@@ -24,7 +24,7 @@ PUBLISHERS:
     - PlanarSystemState (filt_state)
 
 SERVICES:
-    - PlanarSystemService (get_ref_config)
+    - PlanarSystemService (get_ref_config) (client)
 
 NOTES:
     - Let's assume that the configurations that are received in this node are
