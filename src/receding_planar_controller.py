@@ -6,11 +6,9 @@ September 2013
 This program implements a full closed-loop receding horizon controller plus EKF
 estimator for the planar mass system.  Every time a new measurement is received,
 the estimator produces a new estimate for the full state of the system.  A
-different node offers a service that performs a nonlinear trajectory
-optimization to take the system from our current best-estimate of the state to
-the reference state at the next time step, it returns the appropriate control to
-send to the system.
-
+service is then provided to get the next reference state.  Then a full nonlinear
+trajectory optimization is performed to determine the proper controls to send to
+the robot.  
 
 SUBSCRIPTIONS:
     - PlanarSystemConfig (meas_config)
@@ -18,13 +16,15 @@ SUBSCRIPTIONS:
 PUBLISHERS:
     - PlanarSystemConfig (filt_config)
     - PlanarSystemConfig (ref_config)
-    - RobotCommands     (serial_commands)
+    - RobotCommands (serial_commands)
     - Path (mass_ref_path)
+    - Path (mass_filt_path)
     - PlanarCovariance (post_covariance)
     - PlanarSystemState (filt_state)
 
 SERVICES:
     - PlanarSystemService (get_ref_config) (client)
+    - PlanarStateAbsTime (get_ref_state) (client)
 
 NOTES:
     - Let's assume that the configurations that are received in this node are
@@ -39,12 +39,12 @@ import tf
 from puppeteer_msgs.msg import FullRobotState
 from puppeteer_msgs.msg import PlanarSystemConfig
 from puppeteer_msgs.msg import RobotCommands
-from puppeteer_msgs.srv import PlanarSystemService
 from puppeteer_msgs.msg import PlanarCovariance
-from puppeteer_msgs.msg import PlanarControlLaw
-from puppeteer_msgs.srv import PlanarControlLawService
-from puppeteer_msgs.srv import PlanarControlLawServiceRequest
 from puppeteer_msgs.msg import PlanarSystemState
+from puppeteer_msgs.srv import PlanarSystemService
+from puppeteer_msgs.srv import PlanarSystemServiceRequest
+from puppeteer_msgs.srv import PlanarStateAbsTime
+from puppeteer_msgs.srv import PlanarStateAbsTimeRequest
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 import trep
@@ -66,6 +66,9 @@ g = 9.81 ## m/s^2
 h0 = 1 ## default height of robot in m
 DT = 1/30.0 ## nominal dt for the system
 CALLBACK_DIVISOR = 30
+PATH_TIME = 6.0
+PATH_LENGTH = int(PATH_TIME*1/DT)
+
 
 # define a simple helper function for multiplying numpy arrays as
 # matrices
@@ -145,49 +148,56 @@ class System:
     """
     def __init__(self):
         rospy.loginfo("Starting closed-loop controller...")
-        # first we must parse the CL args:
-        args = sys.argv
-        # find reference trajectory
-        abbreviations = {
-            '-f' : '--filename'
-            }
-        ## replace abbreviations with full name
-        for i in range(len(args)):
-            if args[i] in abbreviations:
-                args[i] = abbreviations[args[i]]
-        if '--filename' not in args:
-            # then we just exit
-            rospy.logerr("Must provide a filename!")
-            sys.exit(1)
-        else:
-            fname = args[args.index('--filename')+1]
-            print "filename is ",fname
-            if not os.path.isfile(fname):
-                rospy.logerr("Filename not found: %s",fname)
-                sys.exit(1)
-
-        # now we can load in the traj:
+                
+        # create a system
         self.system = MassSystem2D()
-        (self.tref, self.Qref, self.pref, self.vref, self.uref, self.rhoref) = \
-            trep.load_trajectory(fname, self.system.sys)
+
+        # now we need to wait for the ref_config service to be available.  That
+        # way we can initialize the filter
+        rospy.loginfo("Waiting for reference config service to be available...")
+        rospy.wait_for_service("get_ref_config")
+        get_ref_config = rospy.ServiceProxy("get_ref_config", PlanarSystemService)
+        rospy.loginfo("reference config service now available.")
+        req = PlanarSystemServiceRequest(index=0)
+        resp = get_ref_config(req)
+        # set initial state and config:
+        self.Xref = resp.state
+        self.Qref = resp.state[0:self.system.nQ]
+        self.Uref = resp.input
+        self.Config = resp.config
+
+        # wait for service for the reference state
+        rospy.loginfo("Waiting for reference state service to be available...")
+        rospy.wait_for_service("get_ref_state")
+        get_ref_state = rospy.ServiceProxy("get_ref_state", PlanarStateAbsTime)
+        rospy.loginfo("reference state service now available.")
+
+        ## let's check for the existence of a frequency param.
+        ## Otherwise, let's use the default
+        if rospy.has_param("controller_freq"):
+            tmp = rospy.get_param("controller_freq")
+            self.dt = 1/float(tmp)
+        else:
+            tmp = 1/DT
+            self.dt = DT
+            rospy.set_param("controller_freq", tmp)
+        rospy.loginfo("Controller frequency = %f Hz (dt = %f sec.)", tmp, self.dt)
+        self.tref = np.array([0.0, self.dt]
         # now we can create the dsys object:
         self.system.create_dsys(self.tref)
-        # combine reference trajectory into state and input references:
-        (self.Xref, self.Uref) = self.system.dsys.build_trajectory(
-            Q=self.Qref, p=self.pref, v=self.vref, u=self.uref, rho=self.rhoref)
-        # now we can initialize the variational integrator using the
-        # reference trajectory as our guide
-        self.system.dsys.set(self.Xref[0], self.Uref[0], 0)
+        self.system.dsys.set(self.Xref, self.Uref, 0)
         rospy.loginfo("trep discopt system created and " \
                       "variational integrator initialized")
 
-        # Now we can linearize the trajectory, and find control gains:
-        # first we need the cost functions (let's start with identity)
-        def Qfunc(kf): return np.diag([10, 10, 1, 1, 1, 1, 1, 1])
-        def Rfunc(kf): return np.diag([1, 1])
-        (self.Kproj, self.Avec, self.Bvec) = self.system.dsys.calc_feedback_controller(
-            self.Xref, self.Uref, Q=Qfunc, R=Rfunc, return_linearization=True)
-        rospy.loginfo("Successfully found linearization and feedback law")
+        # check that read in mat file is approximately the same
+        # frequency as the desired:
+        if np.abs(self.dt - resp.dt) >= 0.001:
+            rospy.logerr("parameter frequency and mat file frequency don't match!")
+            rospy.logerr("parameter = %f s   mat file = %f s",self.dt,
+                         (self.tref[1]-self.tref[0]))
+            rospy.signal_shutdown("Frequency Mismatch!")
+        # idle on startup:
+        rospy.set_param("/operating_condition", 0)
 
         # now we can define our filter parameters:
         self.meas_cov = np.diag((0.5,0.5,0.5,0.5,1000,1000,1000,1000)) # measurement covariance
@@ -202,16 +212,14 @@ class System:
         self.filt_state_pub = rospy.Publisher("filt_state", PlanarSystemState)
         self.ref_pub = rospy.Publisher("ref_config", PlanarSystemConfig)
         self.comm_pub = rospy.Publisher("serial_commands", RobotCommands)
-        self.path_pub = rospy.Publisher("mass_ref_path", Path)
-        self.ref_pub = rospy.Publisher("ref_config", PlanarSystemConfig)
+        self.ref_path_pub = rospy.Publisher("mass_ref_path", Path)
+        self.filt_path_pub = rospy.Publisher("mass_filt_path", Path)
         self.cov_pub = rospy.Publisher("post_covariance", PlanarCovariance)
         if rospy.has_param("robot_index"):
             self.robot_index = rospy.get_param("robot_index")
         else:
             self.robot_index = 0
             rospy.set_param("robot_index", self.robot_index)
-        rospy.set_param("/operating_condition", 0)
-
 
         # send the robot it's starting pose in the /optimization_frame
         rospy.logwarn("Waiting for three seconds!!!")
@@ -239,35 +247,6 @@ class System:
         self.first_flag = True
         self.callback_count = 0
 
-        self.send_reference_path()
-
-        ## let's check for the existence of a frequency param.
-        ## Otherwise, let's use the default
-        if rospy.has_param("controller_freq"):
-            tmp = rospy.get_param("controller_freq")
-            self.dt = 1/float(tmp)
-        else:
-            tmp = 1/DT
-            self.dt = DT
-            rospy.set_param("controller_freq", tmp)
-        rospy.loginfo("Controller frequency = %f Hz (dt = %f sec.)", tmp, self.dt)
-
-        # check that read in mat file is approximately the same
-        # frequency as the desired:
-        if np.abs(self.dt - (self.tref[1]-self.tref[0])) >= 0.001:
-            rospy.logerr("parameter frequency and mat file frequency don't match!")
-            rospy.logerr("parameter = %f s   mat file = %f s",self.dt,
-                         (self.tref[1]-self.tref[0]))
-            rospy.signal_shutdown("Frequency Mismatch!")
-        # idle on startup:
-        rospy.set_param("/operating_condition", 0)
-
-        # advertise service handler:
-        self.conf_serv = rospy.Service("get_ref_config", PlanarSystemService,
-                               self.ref_config_service_handler)
-        rospy.wait_for_service("get_receding_controller", timeout=5)
-        self.get_receding_controller = rospy.ServiceProxy("get_receding_controller",
-                                                          PlanarControlLawService)
         return
 
 
@@ -279,60 +258,15 @@ class System:
         com.header.stamp = rospy.get_rostime()
         com.header.frame_id = "/optimization_frame"
         com.div = 4
-        com.x = self.Qref[0][2]
+        com.x = self.Qref[2]
         com.y = 0
         com.th = 0
-        com.height_left = self.Qref[0][3]
+        com.height_left = self.Qref[3]
         com.height_right = 1
         self.comm_pub.publish(com)
         return
 
 
-
-    def ref_config_service_handler(self, req):
-        """
-        Return a reference configuration for the system by either
-        index or time
-        """
-        config = PlanarSystemConfig()
-        if req.t != 0:
-            # then use time, otherwise use the index
-            try:
-                index = [i for i,x in enumerate(self.tref) \
-                         if x <= req.t < self.tref[i+1]][0]
-            except:
-                rospy.logerr("Invalid time for service request!")
-                return None
-            if index > len(self.tref)-1:
-                rospy.logerr("Requested index is too large!")
-                return None
-        else:
-            # use the index:
-            if req.index > len(self.tref)-1:
-                rospy.logerr("Requested index is too large!")
-                return None
-            index = req.index
-        config.xm = self.Qref[index][0]
-        config.ym = self.Qref[index][1]
-        config.xr = self.Qref[index][2]
-        config.r  = self.Qref[index][3]
-        config.header.frame_id = "/optimization_frame"
-        config.header.stamp = rospy.Time.now()
-        time = self.tref[index]
-        dt = self.dt
-        length = len(self.tref)
-        if index != len(self.tref)-1:
-            utmp = self.Uref[index]
-        else:
-            utmp = self.Uref[-1]
-        xtmp = self.Xref[index]
-        return {'config' : config,
-                'input' : utmp,
-                'state' : xtmp,
-                'dt' : dt,
-                'length' : length,
-                'time' : time,
-                'index' : index}
 
 
 

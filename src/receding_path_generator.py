@@ -9,10 +9,10 @@ mass system.
 SUBSCRIPTIONS:
 
 PUBLISHERS:
-    - Path (mass_ref_path)
 
 SERVICES:
     - PlanarSystemService (get_ref_config) (provider)
+    - PlanarStateAbsTime (get_ref_state) (provider)
 
 """
 import roslib; roslib.load_manifest('robot_simulator')
@@ -67,30 +67,60 @@ class PathGenerator:
 
         # define all publishers, subscribers, and services
         self.conf_serv = rospy.Service("get_ref_config", PlanarSystemService,
-            self.ref_config_service_handler)
-
+                                       self.ref_config_service_handler)
+        self.state_serv = rospy.Service("get_ref_state", PlanarStateAbsTime,
+                                        self.ref_state_service_handler)
+        
         
 
+    def ref_config_service_handler(self, req):
+        """
+        Return a reference configuration for the system by either
+        index or time
+        """
+        config = PlanarSystemConfig()
+        if req.t != 0:
+            # then use time, otherwise use the index
+            try:
+                index = [i for i,x in enumerate(self.tref) \
+                         if x <= req.t < self.tref[i+1]][0]
+            except:
+                rospy.logerr("Invalid time for service request!")
+                return None
+            if index > len(self.tref)-1:
+                rospy.logerr("Requested index is too large!")
+                return None
+        else:
+            # use the index:
+            if req.index > len(self.tref)-1:
+                rospy.logerr("Requested index is too large!")
+                return None
+            index = req.index
+        config.xm = self.Qref[index][0]
+        config.ym = self.Qref[index][1]
+        config.xr = self.Qref[index][2]
+        config.r  = self.Qref[index][3]
+        config.header.frame_id = "/optimization_frame"
+        config.header.stamp = rospy.Time.now()
+        time = self.tref[index]
+        dt = self.dt
+        length = len(self.tref)
+        if index != len(self.tref)-1:
+            utmp = self.Uref[index]
+        else:
+            utmp = self.Uref[-1]
+        xtmp = self.Xref[index]
+        return {'config' : config,
+                'input' : utmp,
+                'state' : xtmp,
+                'dt' : dt,
+                'length' : length,
+                'time' : time,
+                'index' : index}
+
         
         
 
-
-
-
-    def send_initial_config(self):
-        com = RobotCommands()
-        com.robot_index = self.robot_index
-        com.type = ord('a')
-        com.header.stamp = rospy.get_rostime()
-        com.header.frame_id = "/optimization_frame"
-        com.div = 4
-        com.x = self.Qref[0][2]
-        com.y = 0
-        com.th = 0
-        com.height_left = self.Qref[0][3]
-        com.height_right = 1
-        self.comm_pub.publish(com)
-        return
 
 
 
