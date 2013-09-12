@@ -16,6 +16,10 @@
     <arg name="input" value="points_throttled" />
   </include>
 
+  <group ns="robot_1" >
+    <param name="robot_index" type="int" value="1" />
+  </group>
+
   <!-- set all parameters for this namespace -->
   <param name="robot_index" value="1" />
   <!-- slow kinect data to a lower frequency -->
