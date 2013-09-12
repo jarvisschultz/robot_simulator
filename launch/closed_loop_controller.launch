@@ -8,7 +8,6 @@
   <arg name="receding" default="false" />
   <param name="/number_robots" type="int" value="1" />
   
-
   <!-- load serial node dictionary -->
   <rosparam file="$(find serial_node)/data/closed_loop_controller_serial_device_dict.xml" 
 	    command="load"/>
@@ -35,10 +34,13 @@
 	args="-f $(arg dir)$(arg file)" unless="$(arg receding)"/>
   <node pkg="robot_simulator" name="receding_controller"
 	type="receding_planar_controller.py" output="screen" respawn="true"
-	args="-f $(arg dir)$(arg file)" if="$(arg receding)"/>
+	if="$(arg receding)"/>
   <node pkg="robot_simulator" name="coordinator"
-	type="planar_coordinator" output="screen"
-	respawn="true" />
+	type="planar_coordinator" output="screen" respawn="true" />
+  <node pkg="robot_simulator" name="path_generator" 
+	  type="receding_path_generator.py" output="screen" respawn="true"
+	  args="-f $(arg dir)$(arg file)" if="$(arg receding)"/>
+
   <!-- start serial node -->
   <node pkg="serial_node" type="multi_serial_topic" name="serial_node"
     	output="log" respawn="true" />
