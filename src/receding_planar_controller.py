@@ -21,6 +21,7 @@ PUBLISHERS:
     - Path (mass_filt_path)
     - PlanarCovariance (post_covariance)
     - PlanarSystemState (filt_state)
+    - Time (start_time)
 
 SERVICES:
     - PlanarSystemService (get_ref_config) (client)
@@ -36,6 +37,7 @@ NOTES:
 import roslib; roslib.load_manifest('robot_simulator')
 import rospy
 import tf
+from std_msgs.msg import Time
 from puppeteer_msgs.msg import FullRobotState
 from puppeteer_msgs.msg import PlanarSystemConfig
 from puppeteer_msgs.msg import RobotCommands
@@ -59,13 +61,14 @@ import os
 import copy
 import time
 from scipy.interpolate import interp1d as spline
+from collections import deque
 
 ## define some global constants:
 BALL_MASS = 0.1244 ## kg
 g = 9.81 ## m/s^2
 h0 = 1 ## default height of robot in m
 DT = 1/30.0 ## nominal dt for the system
-CALLBACK_DIVISOR = 30
+CALLBACK_DIVISOR = 3
 PATH_TIME = 6.0
 PATH_LENGTH = int(PATH_TIME*1/DT)
 
@@ -162,7 +165,9 @@ class System:
         resp = get_ref_config(req)
         # set initial state and config:
         self.Xref = resp.state
+        self.Xref_init = resp.state
         self.Qref = resp.state[0:self.system.nQ]
+        self.Qref_init = resp.state[0:self.system.nQ]
         self.Uref = resp.input
         self.Config = resp.config
 
@@ -182,7 +187,7 @@ class System:
             self.dt = DT
             rospy.set_param("controller_freq", tmp)
         rospy.loginfo("Controller frequency = %f Hz (dt = %f sec.)", tmp, self.dt)
-        self.tref = np.array([0.0, self.dt]
+        self.tref = np.array([0.0, self.dt])
         # now we can create the dsys object:
         self.system.create_dsys(self.tref)
         self.system.dsys.set(self.Xref, self.Uref, 0)
@@ -208,6 +213,7 @@ class System:
         # services, and parameters:
         self.meas_sub = rospy.Subscriber("meas_config", PlanarSystemConfig,
                                          self.meascb)
+        self.time_pub = rospy.Publisher("start_time", Time)
         self.filt_pub = rospy.Publisher("filt_config", PlanarSystemConfig)
         self.filt_state_pub = rospy.Publisher("filt_state", PlanarSystemState)
         self.ref_pub = rospy.Publisher("ref_config", PlanarSystemConfig)
@@ -232,7 +238,6 @@ class System:
         # now let's initialize a bunch of variables that many of the
         # other methods in this class will need access to
         self.tbase = rospy.Time.from_sec(0)
-        self.k = int(0)
         self.t1 = self.t2 = 0
         self.u1 = np.zeros((self.system.sys.nQk, 1))
         self.u2 = np.zeros((self.system.sys.nQk, 1))
@@ -246,7 +251,9 @@ class System:
         self.Xest2 = np.zeros((self.system.dsys.nX, 1))
         self.first_flag = True
         self.callback_count = 0
-
+        self.Xfilt_vec = deque([], maxlen=PATH_LENGTH)
+        self.Xref_vec = deque([], maxlen=PATH_LENGTH)
+        
         return
 
 
@@ -258,32 +265,43 @@ class System:
         com.header.stamp = rospy.get_rostime()
         com.header.frame_id = "/optimization_frame"
         com.div = 4
-        com.x = self.Qref[2]
+        com.x = self.Qref_init[2]
         com.y = 0
         com.th = 0
-        com.height_left = self.Qref[3]
+        com.height_left = self.Qref_init[3]
         com.height_right = 1
         self.comm_pub.publish(com)
         return
 
 
-
-
-
-    def send_reference_path(self):
+    def send_filt_path(self, data):
         path = Path()
-        path.header.frame_id = "/optimization_frame"
-        for i in range(len(self.tref)):
-            pose = PoseStamped()
-            pose.header.frame_id = path.header.frame_id
-            pose.pose.position.x = self.Qref[i][0]
-            pose.pose.position.y = self.Qref[i][1]
-            pose.pose.position.z = 0
-            path.poses.append(pose)
-        self.path_pub.publish(path)
+        path.header.stamp = data.header.stamp
+        path.header.frame_id = data.header.frame_id
+        pose = PoseStamped()
+        pose.header.frame_id = path.header.frame_id
+        pose.pose.position.x = self.Xest2[0]
+        pose.pose.position.y = self.Xest2[1]
+        pose.pose.position.z = 0
+        self.Xfilt_vec.append(pose)
+        path.poses = list(self.Xfilt_vec)
+        self.filt_path_pub.publish(path)
         return
 
 
+    def send_reference_path(self, data):
+        path = Path()
+        path.header.stamp = data.header.stamp
+        path.header.frame_id = data.header.frame_id
+        pose = PoseStamped()
+        pose.header.frame_id = path.header.frame_id
+        pose.pose.position.x = self.Qref[0]
+        pose.pose.position.y = self.Qref[1]
+        pose.pose.position.z = 0
+        self.Xref_vec.append(pose)
+        path.poses = list(self.Xref_vec)
+        self.ref_path_pub.publish(path)
+        return
 
 
     def copy_two_to_one(self):
@@ -299,9 +317,43 @@ class System:
         return
 
 
+    def state_to_array(self, state):
+        """
+        convert a PlanarSystemState message to an array of appropriate length
+        and in the correct order
+        """
+        out = np.array(self.Xref.shape)
+        n = self.system.sys.nQ
+        out[self.system.sys.get_config('xm').index] = state.xm
+        out[self.system.sys.get_config('ym').index] = state.ym
+        out[self.system.sys.get_config('xr').index] = state.xr
+        out[self.system.sys.get_config('r').index] = state.r
+        out[self.system.sys.get_config('xm').index + n] = state.pxm
+        out[self.system.sys.get_config('ym').index + n] = state.pym
+        out[self.system.sys.get_config('xr').index + n] = state.vxr
+        out[self.system.sys.get_config('r').index + n] = state.vr
+        return out
+        
 
-    def calc_send_controls(self):
+    def calc_send_controls(self, tnext):
         self.u1 = self.Xest2[2:4]
+        # first request the reference state at the next time step:
+        try:
+            req = PlanarStateAbsTimeRequest(tnext)
+            resp = self.get_ref_state(req)
+            self.Xref = self.state_to_array(resp.state)
+            self.Qref = self.
+        except rospy.ServiceException, e:
+            print "Service did not process request: %s"%str(e)
+            rospy.logerror("No reference provided to control node")
+            self.stop_robots()
+            rospy.set_param("/operating_condition", 4)
+            return
+        # now we can perform the full trajectory optimization to obtain the
+        # correct inputs to send to the system
+    
+
+
         # call the service to get the best current values for the controller
         try:
             req = PlanarControlLawServiceRequest(index=self.k)
@@ -429,7 +481,6 @@ class System:
         xkm1 = self.Xpred2
         Atmp = self.locally_linearize()
         Fkm1 = Atmp.copy()
-        # Fkm1 = self.Avec[self.k]
         Pkm1 = matmult(Fkm1, self.est_cov, Fkm1.T) + self.proc_cov
         # innovation:
         yk = self.Xmeas2 - xkm1
@@ -476,11 +527,14 @@ class System:
         qest = PlanarSystemConfig()
         qest.header.stamp = data.header.stamp
         qest.header.frame_id = data.header.frame_id
-        qest.xm = self.Qref[self.k][0]
-        qest.ym = self.Qref[self.k][1]
-        qest.xr = self.Qref[self.k][2]
-        qest.r  = self.Qref[self.k][3]
+        qest.xm = self.Qref[0]
+        qest.ym = self.Qref[1]
+        qest.xr = self.Qref[2]
+        qest.r  = self.Qref[3]
         self.ref_pub.publish(qest)
+        # publish the path info
+        self.send_reference_path(data)
+        self.send_filt_path(data)
         return
 
     # define the callback function for the estimate out of the kinect
@@ -497,20 +551,22 @@ class System:
             # we are not running, so let's just keep running the
             # initializations and exiting
             self.first_flag = True
-            # once in a while, let's send the reference path
-            if not (self.callback_count%CALLBACK_DIVISOR):
-                self.send_reference_path()
+            if len(self.Xfilt_vec):
+                self.Xfilt_vec.clear()
+                self.Xref_vec.clear()
             return
 
         if self.first_flag:
             rospy.loginfo("Beginning trajectory")
+            # send starting config
             self.send_initial_config()
-            self.send_reference_path()
             # this is the first run through the callback while in the
             # running state, so let's initialize all of the variables,
             # and then make sure to set the flag back to false at the
             # end of the callback
             self.tbase = data.header.stamp
+            # publish base time:
+            self.time_pub.publish(self.tbase)
             self.t2 = 0.0
             self.k = 0
             # fill out X2 stuff:
@@ -527,7 +583,7 @@ class System:
             # self.Xest2 = (self.Xmeas2+self.Xpred2)/2.0
             self.Xest2 = self.Xmeas2
             # now run our control law
-            self.calc_send_controls()
+            self.calc_send_controls(data.stamp+rospy.Duration.from_sec(self.dt))
             # send filter and reference info:
             self.send_filt_and_ref(data)
             # send out nominal (feedforward) controls:
@@ -556,11 +612,15 @@ class System:
         # Update the EKF, and get the posterior mean:
         (self.Xest2, self.est_cov) = self.update_filter()
         # run control law and send controls:
-        self.calc_send_controls()
+        self.calc_send_controls(data.stamp+rospy.Duration.from_sec(self.dt))
         # publish the covariance:
         self.publish_covariance()
         # send filter and reference info:
         self.send_filt_and_ref(data)
+        # once in a while, let's send the reference path
+        if not (self.callback_count%CALLBACK_DIVISOR):
+            self.send_reference_path(data)
+            self.send_filt_path(data)
 
         return
 
