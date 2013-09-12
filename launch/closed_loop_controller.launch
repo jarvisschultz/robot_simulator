@@ -3,7 +3,6 @@
   <arg name="file" default="default.mat" />
   <arg name="dir" default="$(find robot_simulator)/data/" />
   <arg name="vis" default="true" />
-  <arg name="index" value="1" />
   <arg name="freq" default="30.0" />
   <arg name="receding" default="false" />
   <param name="/number_robots" type="int" value="1" />
@@ -12,10 +11,13 @@
   <rosparam file="$(find serial_node)/data/closed_loop_controller_serial_device_dict.xml" 
 	    command="load"/>
 
-  <!-- start up robot, controller, estimator, etc. -->
-  <arg name="rn" value="robot_1" />
+  <!-- start up the kinect and both planar trackers -->
+  <include file="$(find objecttracker_nu)/launch/nodelet_planar_system.launch" >
+    <arg name="input" value="points_throttled" />
+  </include>
+
   <!-- set all parameters for this namespace -->
-  <param name="robot_index" value="$(arg index)" />
+  <param name="robot_index" value="1" />
   <!-- slow kinect data to a lower frequency -->
   <node pkg="topic_tools" type="throttle" name="kinect_throttler"
 	args="messages /camera/depth/points $(arg freq)
@@ -23,10 +25,6 @@
 	respawn="true"/>
   <!-- set a parameter telling the controller that it is running at freq -->
   <param name="controller_freq" type="double" value="$(arg freq)"/>
-  <!-- start up the kinect and both planar trackers -->
-  <include file="$(find objecttracker_nu)/launch/nodelet_planar_system.launch" >
-    <arg name="input" value="points_throttled" />
-  </include>
   <!-- now I want to start up the controller/ filter, and the
        coordinator for the system -->
   <node pkg="robot_simulator" name="controller"
@@ -38,8 +36,8 @@
   <node pkg="robot_simulator" name="coordinator"
 	type="planar_coordinator" output="screen" respawn="true" />
   <node pkg="robot_simulator" name="path_generator" 
-	  type="receding_path_generator.py" output="screen" respawn="true"
-	  args="-f $(arg dir)$(arg file)" if="$(arg receding)"/>
+	type="receding_path_generator.py" output="screen" respawn="true"
+	args="-f $(arg dir)$(arg file)" if="$(arg receding)"/>
 
   <!-- start serial node -->
   <node pkg="serial_node" type="multi_serial_topic" name="serial_node"
@@ -47,10 +45,9 @@
   
   
   <!-- start up the keyboard node -->
-  <param name="robot_index" value="$(arg index)" />
   <node pkg="keyboard_node" type="multi_keyboard_node"
 	name="keyboard_interface" output="screen" respawn="true"
-	launch-prefix="xterm -rv -e" />
+	launch-prefix="xterm -e" />
 
   <!-- start up rviz unless visualization is set to false -->
   <group if="$(arg vis)">
