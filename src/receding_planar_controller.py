@@ -159,22 +159,22 @@ class System:
         # way we can initialize the filter
         rospy.loginfo("Waiting for reference config service to be available...")
         rospy.wait_for_service("get_ref_config")
-        get_ref_config = rospy.ServiceProxy("get_ref_config", PlanarSystemService)
+        self.get_ref_config = rospy.ServiceProxy("get_ref_config", PlanarSystemService)
         rospy.loginfo("reference config service now available.")
         req = PlanarSystemServiceRequest(index=0)
-        resp = get_ref_config(req)
+        resp = self.get_ref_config(req)
         # set initial state and config:
         self.Xref = resp.state
         self.Xref_init = resp.state
-        self.Qref = resp.state[0:self.system.nQ]
-        self.Qref_init = resp.state[0:self.system.nQ]
+        self.Qref = resp.state[0:self.system.sys.nQ]
+        self.Qref_init = resp.state[0:self.system.sys.nQ]
         self.Uref = resp.input
         self.Config = resp.config
 
         # wait for service for the reference state
         rospy.loginfo("Waiting for reference state service to be available...")
         rospy.wait_for_service("get_ref_state")
-        get_ref_state = rospy.ServiceProxy("get_ref_state", PlanarStateAbsTime)
+        self.get_ref_state = rospy.ServiceProxy("get_ref_state", PlanarStateAbsTime)
         rospy.loginfo("reference state service now available.")
 
         ## let's check for the existence of a frequency param.
@@ -190,7 +190,7 @@ class System:
         self.tref = np.array([0.0, self.dt])
         # now we can create the dsys object:
         self.system.create_dsys(self.tref)
-        self.system.dsys.set(self.Xref, self.Uref, 0)
+        self.system.dsys.set(np.array(self.Xref), np.array(self.Uref), 0)
         rospy.loginfo("trep discopt system created and " \
                       "variational integrator initialized")
 
@@ -209,6 +209,10 @@ class System:
         self.proc_cov = np.diag((0.1,0.1,0.1,0.1,0.15,0.15,0.15,0.15)) # process covariance
         self.est_cov = copy.deepcopy(self.meas_cov) # estimate covariance
 
+        # define cost function parameters
+        self.Qcost = np.diag([50000, 50000, 0.1, 0.1, 0.1, 0.1, 3000, 3000])
+        self.Rcost = np.diag([0.1, 0.1])
+            
         # now we can define all callbacks, publishers, subscribers,
         # services, and parameters:
         self.meas_sub = rospy.Subscriber("meas_config", PlanarSystemConfig,
@@ -322,7 +326,7 @@ class System:
         convert a PlanarSystemState message to an array of appropriate length
         and in the correct order
         """
-        out = np.array(self.Xref.shape)
+        out = np.zeros(self.system.dsys.nX)
         n = self.system.sys.nQ
         out[self.system.sys.get_config('xm').index] = state.xm
         out[self.system.sys.get_config('ym').index] = state.ym
@@ -341,32 +345,63 @@ class System:
         try:
             req = PlanarStateAbsTimeRequest(tnext)
             resp = self.get_ref_state(req)
+            # do we need to exit?
+            if resp.stop:
+                rospy.loginfo("Trajectory finished...")
+                self.stop_robots()
+                self.first_flag = True
+                rospy.set_param("/operating_condition", 3)
+                return
             self.Xref = self.state_to_array(resp.state)
-            self.Qref = self.
+            self.Qref = self.Xref[0:self.system.sys.nQ]
         except rospy.ServiceException, e:
             print "Service did not process request: %s"%str(e)
-            rospy.logerror("No reference provided to control node")
+            rospy.logerr("No reference provided to control node")
             self.stop_robots()
             rospy.set_param("/operating_condition", 4)
             return
         # now we can perform the full trajectory optimization to obtain the
         # correct inputs to send to the system
-    
-
-
-        # call the service to get the best current values for the controller
+        # first get an initial guess:
+        self.system.dsys.set(self.Xest2, self.Xref[2:4], 0)
+        X0 = np.vstack((self.Xest2, self.system.dsys.f()))
+        U0 = np.array([self.Xref[2:4]])
+        Xd = np.vstack((self.Xest2, self.Xref))
+        Ud = np.array([self.Xref[2:4]])
+        cost = discopt.DCost(Xd, Ud, self.Qcost, self.Rcost)
+        optimizer = discopt.DOptimizer(self.system.dsys, cost)
+        optimizer.optimize_ic = False
+        optimizer.descent_tolerance = 1e-6
+        optimizer.first_method_iterations = 0
+        optimizer.armijo_beta = 0.99
+        finished = False
+        optimizer.monitor = discopt.DOptimizerMonitor()
+        # now we can actually perform the trajectory optimization
         try:
-            req = PlanarControlLawServiceRequest(index=self.k)
-            resp = self.get_receding_controller(req)
-            n = self.system.dsys.nX
-            utmp = np.array(resp.con.uff)
-            Ktmp = np.array([resp.con.K.data[0:n], resp.con.K.data[n:]])
-        except rospy.ServiceException, e:
-            print "Service did not process request: %s"%str(e)
-            utmp = self.Uref[self.k]
-            Ktmp = self.Kproj[self.k]
-        self.u2 = utmp + \
-          matmult(Ktmp, self.Xref[self.k]-self.Xest2)
+            step_count = 0
+            while not finished:
+                finished,X0,U0,dcost,ncost = optimizer.step(
+                    step_count, X0, U0, method='newton')
+                step_count += 1
+                if rospy.Time.now() > tnext:
+                    rospy.logwarn("Optimization taking longer than dt")
+                    break
+        except trep.ConvergenceError as e:
+            rospy.logwarn("Detected optimization problem: %s"%e.message)
+            rospy.logerr("Failed to optimize... exiting...")
+            self.stop_robots()
+            rospy.set_param("/operating_condition", 4)
+            rospy.signal_shutdown("Optimization failure")
+        except:
+            rospy.logerr("Unknown error... exiting...")
+            self.stop_robots()
+            rospy.set_param("/operating_condition", 4)
+            rospy.signal_shutdown("Optimization failure")
+        # X = X0
+        # U = U0
+        # now convert the optimal trajectory into a set of controls for the
+        # robot
+        self.u2 = U0[0]
         # now convert to a velocity and send out:
         ucom = (self.u2-self.u1)/self.dt
         com = RobotCommands()
@@ -583,7 +618,7 @@ class System:
             # self.Xest2 = (self.Xmeas2+self.Xpred2)/2.0
             self.Xest2 = self.Xmeas2
             # now run our control law
-            self.calc_send_controls(data.stamp+rospy.Duration.from_sec(self.dt))
+            self.calc_send_controls(data.header.stamp+rospy.Duration.from_sec(self.dt))
             # send filter and reference info:
             self.send_filt_and_ref(data)
             # send out nominal (feedforward) controls:
@@ -592,13 +627,6 @@ class System:
 
         # let's increment our index:
         self.k += 1
-        # do we need to exit?
-        if self.k >= len(self.tref)-1:
-            rospy.loginfo("Trajectory finished...")
-            self.stop_robots()
-            self.first_flag = True
-            rospy.set_param("/operating_condition", 3)
-            return
         # copy X2 stuff to X1:
         self.copy_two_to_one()
         # calculate and fill out new X2 stuff:
@@ -612,7 +640,7 @@ class System:
         # Update the EKF, and get the posterior mean:
         (self.Xest2, self.est_cov) = self.update_filter()
         # run control law and send controls:
-        self.calc_send_controls(data.stamp+rospy.Duration.from_sec(self.dt))
+        self.calc_send_controls(data.header.stamp+rospy.Duration.from_sec(self.dt))
         # publish the covariance:
         self.publish_covariance()
         # send filter and reference info:

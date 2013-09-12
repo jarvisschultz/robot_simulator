@@ -7,6 +7,7 @@ This file simply generates reference configurations/ states for the suspended
 mass system.
 
 SUBSCRIPTIONS:
+    - Time (start_time)
 
 PUBLISHERS:
 
@@ -18,28 +19,21 @@ SERVICES:
 import roslib; roslib.load_manifest('robot_simulator')
 import rospy
 import tf
+from std_msgs.msg import Time
 from puppeteer_msgs.msg import PlanarSystemConfig
-from puppeteer_msgs.srv import PlanarSystemService
-from puppeteer_msgs.msg import PlanarCovariance
-from puppeteer_msgs.msg import PlanarControlLaw
-from puppeteer_msgs.srv import PlanarControlLawService
-from puppeteer_msgs.srv import PlanarControlLawServiceRequest
 from puppeteer_msgs.msg import PlanarSystemState
-from nav_msgs.msg import Path
-from geometry_msgs.msg import PoseStamped
-from math import sin, cos, floor
-from math import pi as mpi
-import numpy as np
-import scipy as sp
-from scipy.interpolate import interp1d as spline
+from puppeteer_msgs.srv import PlanarStateAbsTime
+from puppeteer_msgs.srv import PlanarSystemService
+from puppeteer_msgs.srv import PlanarSystemServiceRequest
+import sys, os
 
-# local imports:
+## internal
 import receding_planar_controller as rp
-
 
 
 class PathGenerator:
     def __init__(self):
+        args = sys.argv
         rospy.loginfo("Mass path generator started")
         # find reference trajectory
         abbreviations = {
@@ -64,14 +58,28 @@ class PathGenerator:
         system = rp.MassSystem2D()
         (self.tref, self.Qref, self.pref, self.vref, self.uref, self.rhoref) = \
             rp.trep.load_trajectory(fname, system.sys)
+        self.dt = self.tref[1] - self.tref[0]
+        system.create_dsys(self.tref)
+        (self.Xref, self.Uref) = system.dsys.build_trajectory(
+             Q=self.Qref, p=self.pref, v=self.vref, u=self.uref, rho=self.rhoref)
 
+        
         # define all publishers, subscribers, and services
+        self.tstart_sub = rospy.Subscriber("start_time", Time, self.timecb)
         self.conf_serv = rospy.Service("get_ref_config", PlanarSystemService,
                                        self.ref_config_service_handler)
         self.state_serv = rospy.Service("get_ref_state", PlanarStateAbsTime,
                                         self.ref_state_service_handler)
-        
-        
+        self.tbase = rospy.Time(0)
+        return
+
+    def timecb(self, time):
+        """
+        When the controller node publishes a new start time, this callback
+        updates the local copy of the base ROS time
+        """
+        self.tbase = time.data
+        return
 
     def ref_config_service_handler(self, req):
         """
@@ -118,9 +126,34 @@ class PathGenerator:
                 'time' : time,
                 'index' : index}
 
-        
-        
-
+    def ref_state_service_handler(self, req):
+        tdesired = req.t
+        # first check if the tbase has properly been set:
+        if abs(self.tbase.to_sec()) < 0.01:
+            rospy.logwarn("Path generator does not have a base time yet")
+            return
+        # since it has, let's manually call the other handler to fill out state reply:
+        t = (tdesired-self.tbase).to_sec()
+        req = PlanarSystemServiceRequest(t=t)
+        resp = self.ref_config_service_handler(req)
+        # now convert the response into a state message and reply with that:
+        replystate = PlanarSystemState()
+        replybool = False
+        if resp is None:
+            replybool = True
+        else:
+            replystate.header = resp['config'].header
+            state = resp['state']
+            replystate.xm  = state[0]
+            replystate.ym  = state[1]
+            replystate.xr  = state[2]
+            replystate.r   = state[3]
+            replystate.pxm = state[4]
+            replystate.pym = state[5]
+            replystate.vxr = state[6]
+            replystate.vr  = state[7]
+        return {'state' : replystate,
+                'stop'  : replybool}
 
 
 

@@ -32,15 +32,22 @@
 	 coordinator simulator -->
     <node pkg="robot_simulator" name="controller"
 	  type="planar_cl_controller.py" output="screen" respawn="true"
-	  args="-f $(arg dir)$(arg file)" unless="$(arg receding)"/>
+	  unless="$(arg receding)"/>
     <node pkg="robot_simulator" name="receding_controller"
 	  type="receding_planar_controller.py" output="screen" respawn="true"
 	  args="-f $(arg dir)$(arg file)" if="$(arg receding)"/>
     <param name="window_length" value="$(arg window)" type="double" 
 	   if="$(arg receding)"/>
-    <node pkg="robot_simulator" name="receding_optimizer"
-	  type="receding_planar_optimizer.py" output="screen" respawn="true"
-	  if="$(arg receding)"/>
+
+    <!-- start path generator if receding true -->
+    <node pkg="robot_simulator" name="path_generator" 
+	  type="receding_path_generator.py" output="screen" respawn="true"
+	  args="-f $(arg dir)$(arg file)" if="$(arg receding)"/>
+    <!-- start up receding optimizer if receding is true -->
+    <!-- <node pkg="robot_simulator" name="receding_optimizer" -->
+    <!-- 	  type="receding_planar_optimizer.py" output="screen" respawn="true" -->
+    <!-- 	  if="$(arg receding)"/> -->
+
   </group>
 
   <!-- start up the keyboard node -->
