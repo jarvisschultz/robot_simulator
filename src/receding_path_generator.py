@@ -26,6 +26,7 @@ from puppeteer_msgs.srv import PlanarStateAbsTime
 from puppeteer_msgs.srv import PlanarSystemService
 from puppeteer_msgs.srv import PlanarSystemServiceRequest
 import sys, os
+import numpy as np
 
 ## internal
 import receding_planar_controller as rp
@@ -143,15 +144,27 @@ class PathGenerator:
             replybool = True
         else:
             replystate.header = resp['config'].header
-            state = resp['state']
-            replystate.xm  = state[0]
-            replystate.ym  = state[1]
-            replystate.xr  = state[2]
-            replystate.r   = state[3]
-            replystate.pxm = state[4]
-            replystate.pym = state[5]
-            replystate.vxr = state[6]
-            replystate.vr  = state[7]
+            index = resp['index']
+            # now get the next response as well:
+            req = PlanarSystemServiceRequest(index=(index+1))
+            resp2 = self.ref_config_service_handler(req)
+            if resp2 is None:
+                replybool = True
+            else:
+                x1 = np.array(resp['state'])
+                x2 = np.array(resp2['state'])
+                t1 = resp['time']
+                t2 = resp2['time']
+                state = x1 + ((t-t1)/(t2-t1))*(x2-x1)
+                # state = resp['state']
+                replystate.xm  = state[0]
+                replystate.ym  = state[1]
+                replystate.xr  = state[2]
+                replystate.r   = state[3]
+                replystate.pxm = state[4]
+                replystate.pym = state[5]
+                replystate.vxr = state[6]
+                replystate.vr  = state[7]
         return {'state' : replystate,
                 'stop'  : replybool}
 

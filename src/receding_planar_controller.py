@@ -62,6 +62,7 @@ import copy
 import time
 from scipy.interpolate import interp1d as spline
 from collections import deque
+import scipy.io as sio
 
 ## define some global constants:
 BALL_MASS = 0.1244 ## kg
@@ -378,6 +379,8 @@ class System:
             U0 = np.vstack((U0, u))
             self.system.dsys.step(u)
         X0 = np.vstack((X0, self.system.dsys.f()))
+        X0_init = X0.copy()
+        U0_init = U0.copy()
         Xd[:,6:8] = 0
         cost = discopt.DCost(Xd, Ud, self.Qcost, self.Rcost)
         optimizer = discopt.DOptimizer(self.system.dsys, cost)
@@ -412,8 +415,20 @@ class System:
             self.stop_robots()
             rospy.set_param("/operating_condition", 4)
             rospy.signal_shutdown("Optimization failure")
-        # X = X0
-        # U = U0
+
+        # if (rospy.Time.now() - self.tbase).to_sec() > 1.5:
+        #     fname = '/home/jarvis/Desktop/misc/debug_data/receding_debug/true_dat.mat'
+        #     dat = {}
+        #     dat['X'] = X0
+        #     dat['Xd'] = Xd
+        #     dat['X0'] = X0_init
+        #     dat['U'] = U0
+        #     dat['Ud'] = Ud
+        #     dat['U0'] = U0_init
+        #     dat['tref'] = self.tref
+        #     sio.savemat(fname, dat)
+        #     rospy.signal_shutdown("done")
+
         # now convert the optimal trajectory into a set of controls for the
         # robot
         self.u2 = U0[0]
