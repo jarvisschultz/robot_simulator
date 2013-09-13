@@ -397,7 +397,9 @@ class System:
                     step_count, X0, U0, method=method)
                 step_count += 1
                 if rospy.Time.now() > tnext:
-                    rospy.logwarn("Optimization taking longer than dt")
+                    rospy.logwarn("optimization time elapsed = "\
+                                   "{0:4.4f} s for {1:d} steps".format(
+                                       (rospy.Time.now()-tnext).to_sec(), step_count, i))
                     break
         except trep.ConvergenceError as e:
             rospy.logwarn("Detected optimization problem: %s"%e.message)
@@ -652,7 +654,8 @@ class System:
             # self.Xest2 = (self.Xmeas2+self.Xpred2)/2.0
             self.Xest2 = self.Xmeas2
             # now run our control law
-            self.calc_send_controls(data.header.stamp+rospy.Duration.from_sec(self.dt))
+            self.calc_send_controls(data.header.stamp +
+                                    rospy.Duration.from_sec(self.dt*WINDOW))
             # send filter and reference info:
             self.send_filt_and_ref(data)
             return
@@ -671,7 +674,8 @@ class System:
         # Update the EKF, and get the posterior mean:
         (self.Xest2, self.est_cov) = self.update_filter()
         # run control law and send controls:
-        self.calc_send_controls(data.header.stamp+rospy.Duration.from_sec(self.dt))
+        self.calc_send_controls(data.header.stamp + 
+                                rospy.Duration.from_sec(self.dt*WINDOW))
         # publish the covariance:
         self.publish_covariance()
         # send filter and reference info:
