@@ -71,7 +71,7 @@ DT = 1/30.0 ## nominal dt for the system
 CALLBACK_DIVISOR = 3
 PATH_TIME = 6.0
 PATH_LENGTH = int(PATH_TIME*1/DT)
-
+WINDOW = 16
 
 # define a simple helper function for multiplying numpy arrays as
 # matrices
@@ -164,12 +164,12 @@ class System:
         req = PlanarSystemServiceRequest(index=0)
         resp = self.get_ref_config(req)
         # set initial state and config:
-        self.Xref = resp.state
+        self.Xref = np.array([resp.state]*WINDOW)
         self.Xref_init = resp.state
         self.Qref = resp.state[0:self.system.sys.nQ]
         self.Qref_init = resp.state[0:self.system.sys.nQ]
-        self.Uref = resp.input
-        self.Config = resp.config
+        self.Uref = np.array([resp.input]*(WINDOW-1))
+        # self.Config = resp.config
 
         # wait for service for the reference state
         rospy.loginfo("Waiting for reference state service to be available...")
@@ -187,10 +187,11 @@ class System:
             self.dt = DT
             rospy.set_param("controller_freq", tmp)
         rospy.loginfo("Controller frequency = %f Hz (dt = %f sec.)", tmp, self.dt)
-        self.tref = np.array([0.0, self.dt])
+        # self.tref = np.array([0.0, self.dt])
+        self.tref = np.arange(0, WINDOW*self.dt + self.dt, self.dt)
         # now we can create the dsys object:
         self.system.create_dsys(self.tref)
-        self.system.dsys.set(np.array(self.Xref), np.array(self.Uref), 0)
+        self.system.dsys.set(np.array(self.Xref[0]), np.array(self.Uref[0]), 0)
         rospy.loginfo("trep discopt system created and " \
                       "variational integrator initialized")
 
@@ -210,7 +211,8 @@ class System:
         self.est_cov = copy.deepcopy(self.meas_cov) # estimate covariance
 
         # define cost function parameters
-        self.Qcost = np.diag([50000, 50000, 0.1, 0.1, 0.1, 0.1, 3000, 3000])
+        # self.Qcost = np.diag([1, 1, 0.1, 0.1, 0.1, 0.1, 50000, 50000])
+        self.Qcost = np.diag([10, 10, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
         self.Rcost = np.diag([0.1, 0.1])
             
         # now we can define all callbacks, publishers, subscribers,
@@ -254,6 +256,8 @@ class System:
         self.Xest1 = np.zeros((self.system.dsys.nX, 1))
         self.Xest2 = np.zeros((self.system.dsys.nX, 1))
         self.first_flag = True
+        self.full_ref_flag = False
+        self.ref_lag_count = 0
         self.callback_count = 0
         self.Xfilt_vec = deque([], maxlen=PATH_LENGTH)
         self.Xref_vec = deque([], maxlen=PATH_LENGTH)
@@ -299,8 +303,8 @@ class System:
         path.header.frame_id = data.header.frame_id
         pose = PoseStamped()
         pose.header.frame_id = path.header.frame_id
-        pose.pose.position.x = self.Qref[0]
-        pose.pose.position.y = self.Qref[1]
+        pose.pose.position.x = self.Qref[0, 0]
+        pose.pose.position.y = self.Qref[0, 1]
         pose.pose.position.z = 0
         self.Xref_vec.append(pose)
         path.poses = list(self.Xref_vec)
@@ -352,8 +356,8 @@ class System:
                 self.first_flag = True
                 rospy.set_param("/operating_condition", 3)
                 return
-            self.Xref = self.state_to_array(resp.state)
-            self.Qref = self.Xref[0:self.system.sys.nQ]
+            self.Xref = np.vstack((self.Xref, self.state_to_array(resp.state)))[1:]
+            self.Qref = self.Xref[:,0:self.system.sys.nQ]
         except rospy.ServiceException, e:
             print "Service did not process request: %s"%str(e)
             rospy.logerr("No reference provided to control node")
@@ -363,15 +367,22 @@ class System:
         # now we can perform the full trajectory optimization to obtain the
         # correct inputs to send to the system
         # first get an initial guess:
-        self.system.dsys.set(self.Xest2, self.Xref[2:4], 0)
-        X0 = np.vstack((self.Xest2, self.system.dsys.f()))
-        U0 = np.array([self.Xref[2:4]])
+        self.system.dsys.time = self.tref
         Xd = np.vstack((self.Xest2, self.Xref))
-        Ud = np.array([self.Xref[2:4]])
+        Ud = self.Xref[:,2:4]
+        self.system.dsys.set(self.Xest2, self.Xref[0,2:4], 0)
+        X0 = np.array([self.Xest2])
+        U0 = np.array([self.Xref[0,2:4]])
+        for i,u in enumerate(Ud[1:]):
+            X0 = np.vstack((X0, self.system.dsys.f()))
+            U0 = np.vstack((U0, u))
+            self.system.dsys.step(u)
+        X0 = np.vstack((X0, self.system.dsys.f()))
+        Xd[:,6:8] = 0
         cost = discopt.DCost(Xd, Ud, self.Qcost, self.Rcost)
         optimizer = discopt.DOptimizer(self.system.dsys, cost)
         optimizer.optimize_ic = False
-        optimizer.descent_tolerance = 1e-6
+        optimizer.descent_tolerance = 1e-1
         optimizer.first_method_iterations = 0
         optimizer.armijo_beta = 0.99
         finished = False
@@ -380,8 +391,10 @@ class System:
         try:
             step_count = 0
             while not finished:
+                if step_count == 0: method='steepest'
+                else: method='steepest'
                 finished,X0,U0,dcost,ncost = optimizer.step(
-                    step_count, X0, U0, method='newton')
+                    step_count, X0, U0, method=method)
                 step_count += 1
                 if rospy.Time.now() > tnext:
                     rospy.logwarn("Optimization taking longer than dt")
@@ -586,6 +599,8 @@ class System:
             # we are not running, so let's just keep running the
             # initializations and exiting
             self.first_flag = True
+            self.full_ref_flag = False
+            self.ref_lag_count = 0
             if len(self.Xfilt_vec):
                 self.Xfilt_vec.clear()
                 self.Xref_vec.clear()
@@ -603,7 +618,26 @@ class System:
             # publish base time:
             self.time_pub.publish(self.tbase)
             self.t2 = 0.0
-            self.k = 0
+            self.first_flag = False
+            return
+        if not self.full_ref_flag:
+            # try and fill up the array
+            while self.ref_lag_count < WINDOW:
+                try:
+                    req = PlanarStateAbsTimeRequest(self.tbase +
+                        rospy.Duration.from_sec(self.ref_lag_count+1)*self.dt)
+                    resp = self.get_ref_state(req)
+                    if not resp.stop:
+                        self.Xref[self.ref_lag_count] = self.state_to_array(
+                            resp.state)
+                        self.Qref = self.Xref[:,0:self.system.sys.nQ]
+                        self.ref_lag_count += 1
+                    else:
+                        return
+                except rospy.ServiceException, e:
+                    rospy.logwarn("Service did not process request: %s"%str(e))
+                    return
+            self.full_ref_flag = True
             # fill out X2 stuff:
             self.Qmeas2 = np.array([data.xm, data.ym, data.xr, data.r])
             # let's assume that both the discrete generalized momenta
@@ -612,7 +646,7 @@ class System:
             self.Xmeas2 = np.hstack((self.Qmeas2, np.zeros(self.system.sys.nQ)))
             # our initial prediction for the state is just the initial
             # state of the system:
-            self.Xpred2 = self.Xref[self.k]
+            self.Xpred2 = self.Xref[0]
             # # for our initial estimate, let's just average the
             # # prediction and the measurement
             # self.Xest2 = (self.Xmeas2+self.Xpred2)/2.0
@@ -621,12 +655,9 @@ class System:
             self.calc_send_controls(data.header.stamp+rospy.Duration.from_sec(self.dt))
             # send filter and reference info:
             self.send_filt_and_ref(data)
-            # send out nominal (feedforward) controls:
-            self.first_flag = False
             return
 
-        # let's increment our index:
-        self.k += 1
+
         # copy X2 stuff to X1:
         self.copy_two_to_one()
         # calculate and fill out new X2 stuff:
