@@ -14,9 +14,21 @@ controlling the length of the string.
 Everytime the odometry callback is called, we use trep to step the
 variational integrator forward in time, and we then publish the
 location of the dynamic variables as a PointStamped.
+
+SUBSCRIPTIONS:
+    - robot_state_noise_free (FullRobotState)
+    - /operating_condition (OperatingCondition)        
+
+PUBLISHERS:
+    - mass_location (PointStamped)
+    - meas_config (PlanarSystemConfig)
+
+PARAMETERS:
+    - /simulator_noise ~ defines how much noise to add
+
 """
 
-## define all imports:
+# ROS imports
 import roslib; roslib.load_manifest('robot_simulator')
 import rospy
 import tf
@@ -26,6 +38,11 @@ from geometry_msgs.msg import QuaternionStamped
 from geometry_msgs.msg import Point
 from puppeteer_msgs.msg import FullRobotState
 from puppeteer_msgs.msg import PlanarSystemConfig
+from puppeteer_msgs.msg import OperatingCondition
+from puppeteer_msgs.srv import OperatingConditionChange
+from puppeteer_msgs.srv import OperatingConditionChangeRequest
+
+# OTHER imports
 import trep
 from trep import tx, ty, tz, rx, ry, rz
 from math import sin, cos
@@ -174,16 +191,23 @@ class MassSimulator:
 
         ## define a transform listener for publishing the transforms
         ## to the location of the mass
-        self.br = tf.TransformBroadcaster()
         self.listener = tf.TransformListener()
+        self.br = tf.TransformBroadcaster()
         ## wait for transform:
         try:
-            now = rospy.Time.now()
+            rospy.loginfo("Waiting for transform from /map to /optimization_frame")
             self.listener.waitForTransform("/optimization_frame", "/map",
-                                           now, rospy.Duration(3.0))
+                                           rospy.Time(), rospy.Duration(3.0))
         except (tf.Exception):
             rospy.logwarn("Could not find transform to optimization_frame after waiting!")
 
+        # wait for the operating_condition_change service
+        self.operating_condition = OperatingCondition.IDLE
+        rospy.loginfo("Waiting for operating_condition_change service")
+        rospy.wait_for_service("/operating_condition_change")
+        rospy.loginfo("operating_condition_change service now available")
+        self.op_change_client = rospy.ServiceProxy("/operating_condition_change",
+                                                   OperatingConditionChange)
 
         ## define the system that we will use to integrate the dynamics
         self.sys = MassSystem3D()
@@ -195,6 +219,8 @@ class MassSimulator:
         ## define a subscriber and callback for the robot_simulator
         self.sub = rospy.Subscriber("robot_state_noise_free", FullRobotState,
                                     self.inputcb)
+        self.op_cond_sub = rospy.Subscriber("/operating_condition",
+                                            OperatingCondition, self.opcb)
 
         ## define a publisher for the position of the mass:
         self.mass_pub = rospy.Publisher("mass_location", PointStamped)
@@ -210,6 +236,13 @@ class MassSimulator:
             self.noise = 0.0
 
         return
+
+
+    def opcb(self, data):
+        # rospy.loginfo("Operating condition cb: %d"%data.state)
+        self.operating_condition = data.state
+        return
+    
 
     def inputcb(self, data):
         rospy.logdebug("inputcb triggered")
@@ -257,7 +290,23 @@ class MassSimulator:
 
         ## if we have not initialized the VI, let's do it, otherwise,
         ## let's integrate
-        if not self.initialized_flag:
+        
+        # # get operating_condition:
+        # if rospy.has_param("/operating_condition"):
+        #     operating = rospy.get_param("/operating_condition")
+        # else:
+        #     return
+        operating = self.operating_condition
+        # set string length
+        self.len = data.left;
+
+        # if not self.initialized_flag and \
+        #     (operating is OperatingCondition.CALIBRATE or \
+        #      operating is OperatingCondition.RUN):
+        if operating is OperatingCondition.IDLE:
+            self.initialized_flag = False
+            return
+        elif not self.initialized_flag:
             q = [
                 ptrans.point.x,
                 ptrans.point.y-h0,
@@ -265,24 +314,10 @@ class MassSimulator:
                 ptrans.point.x,
                 ptrans.point.z,
                 h0 ]
+            # print "initializing VI, q = ",q
             self.sys.reset_integration(state=q)
             self.last_time = ptrans.header.stamp
             self.initialized_flag = True
-            return
-
-        # get operating_condition:
-        if rospy.has_param("/operating_condition"):
-            operating = rospy.get_param("/operating_condition")
-        else:
-            return
-
-
-        # set string length
-        self.len = data.left;
-
-        ## if we are not running, just reset the parameter:
-        if operating is not 2:
-            self.initialized_flag = False
             return
         else:
             self.initialized_flag = True
@@ -293,6 +328,7 @@ class MassSimulator:
             self.last_time = ptrans.header.stamp
             rospy.logdebug("Taking a step! dt = "+str(dt))
             self.sys.take_step(dt, rho)
+
             ## now we can get the state of the system
             q = self.sys.get_current_configuration()
 
@@ -348,8 +384,6 @@ class MassSimulator:
                                   new_point.header.stamp,
                                   fr,
                                   "/optimization_frame")
-
-
 
         return
 
