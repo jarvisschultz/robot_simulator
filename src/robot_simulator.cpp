@@ -81,6 +81,7 @@ private:
     geometry_msgs::Point Lengths, Lengths_nf;
     boost::array<double,36ul> kincov;
     bool simulate_occlusions;
+    double controller_freq;
     
 
 public:
@@ -99,9 +100,19 @@ public:
 	watchdog = n_.createTimer(ros::Duration(1/TIMEOUT_FREQ),
 				  &Simulator::watchdogcb, this);
 
+	// get frequency we are running the publisher at
+	if (ros::param::has("controller_freq"))
+	    ros::param::get("controller_freq", controller_freq);
+	else
+	{
+	    ROS_WARN("Frequency of the robot simulator is not set. Using default.");
+	    controller_freq = PUB_FREQUENCY;
+	    ros::param::set("", controller_freq);
+	}
+
 	// create another timer to publish the results state of the
 	// robot as an Odometry message and as a tf
-	pub_time = n_.createTimer(ros::Duration(1/PUB_FREQUENCY),
+	pub_time = n_.createTimer(ros::Duration(1/controller_freq),
 				  &Simulator::publishcb, this);
 	pub = n_.advertise<nav_msgs::Odometry>("vo", 100);
 	noise_free_pub = n_.advertise<nav_msgs::Odometry>("vo_noise_free", 100);
