@@ -107,7 +107,7 @@ public:
 	{
 	    ROS_WARN("Frequency of the robot simulator is not set. Using default.");
 	    controller_freq = PUB_FREQUENCY;
-	    ros::param::set("", controller_freq);
+	    ros::param::set("controller_freq", controller_freq);
 	}
 
 	// create another timer to publish the results state of the
