@@ -61,13 +61,13 @@ public:
 	mass_marker.color.g = 1.0f;
 	mass_marker.color.b = 1.0f;
 	mass_marker.color.a = 1.0f;
-	mass_marker.lifetime = ros::Duration(0.1);
+	mass_marker.lifetime = ros::Duration(0.2);
 
 	string_marker.type = visualization_msgs::Marker::LINE_LIST;
 	string_marker.scale.x = .01;
 	string_marker.color.a = 1.0f;
 	string_marker.points.resize(2);
-	string_marker.lifetime = ros::Duration(0.1);
+	string_marker.lifetime = ros::Duration(0.2);
 	
 	return;
     }

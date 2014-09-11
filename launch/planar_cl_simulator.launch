@@ -21,7 +21,7 @@
       <arg name="rn" value="$(arg rn)" />
     </include>
 
-    <param name="/simulator_noise" value="0.01" />
+    <param name="/simulator_noise" value="0.0" />
     <node pkg="robot_simulator" name="mass_simulator"
 	  type="suspended_mass_trep.py"
           output="screen" respawn="true" />
@@ -35,19 +35,26 @@
 	  args="-f $(arg dir)$(arg file)" unless="$(arg receding)"/>
     <node pkg="robot_simulator" name="receding_controller"
 	  type="receding_planar_controller.py" output="screen" respawn="true"
-	  args="-f $(arg dir)$(arg file)" if="$(arg receding)"/>
+	  if="$(arg receding)"/>
     <param name="window_length" value="$(arg window)" type="double" 
 	   if="$(arg receding)"/>
-    <node pkg="robot_simulator" name="receding_optimizer"
-	  type="receding_planar_optimizer.py" output="screen" respawn="true"
-	  if="$(arg receding)"/>
+
+    <!-- start path generator if receding true -->
+    <node pkg="robot_simulator" name="path_generator" 
+	  type="receding_path_generator.py" output="screen" respawn="true"
+	  args="-f $(arg dir)$(arg file)" if="$(arg receding)"/>
+    <!-- start up receding optimizer if receding is true -->
+    <!-- <node pkg="robot_simulator" name="receding_optimizer" -->
+    <!-- 	  type="receding_planar_optimizer.py" output="screen" respawn="true" -->
+    <!-- 	  if="$(arg receding)"/> -->
+
   </group>
 
   <!-- start up the keyboard node -->
   <param name="robot_index" value="$(arg index)" />
   <node pkg="keyboard_node" type="multi_keyboard_node"
 	name="keyboard_interface" output="screen" respawn="true"
-	launch-prefix="xterm -rv -e" />
+	launch-prefix="xterm -e" />
 
   <!-- start up rviz unless visualization is set to false -->
   <group if="$(arg vis)">
