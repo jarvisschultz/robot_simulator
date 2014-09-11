@@ -45,6 +45,7 @@
 #include <tf/transform_listener.h>
 #include <tf/transform_datatypes.h>
 #include <tf_conversions/tf_eigen.h>
+
 #include <Eigen/Core>
 
 
@@ -211,7 +212,7 @@ public:
 	    transform.setOrigin(tf::Vector3(cal_pos(0),
 					    cal_pos(1), cal_pos(2)));
 	    transform.setRotation(tf::Quaternion(0,0,0,1));
-	    tf::TransformTFToEigen(transform, gwo);
+	    tf::transformTFToEigen(transform, gwo);
 	    gwo = gwo.inverse();
 	    // transform robot:
 	    robot_trans << r_pt.x, r_pt.y, r_pt.z;

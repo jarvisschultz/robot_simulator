@@ -2,14 +2,10 @@
   <name>robot_simulator</name>
   <version>1.0.0</version>
   <description>robot_simulator</description>
-  <maintainer email="">Jarvis Schultz</maintainer>
+  <maintainer email="schultzjarvis@todo.todo">Jarvis Schultz</maintainer>
 
-  <license>BSD</license>
+  <license>GNUv3</license>
 
-  <url type="website">http://ros.org/wiki/robot_simulator</url>
-  <!-- <url type="bugtracker"></url> -->
-
-  <author>Jarvis Schultz</author>
 
   <!-- Dependencies which this package needs to build itself. -->
   <buildtool_depend>catkin</buildtool_depend>
@@ -24,7 +20,8 @@
   <build_depend>tf_conversions</build_depend>
   <build_depend>angles</build_depend>
   <build_depend>visualization_msgs</build_depend>
-
+  <build_depend>libeigen3-dev</build_depend>
+  
   <!-- Dependencies needed after this package is compiled. -->
   <run_depend>puppeteer_msgs</run_depend>
   <run_depend>std_msgs</run_depend>
@@ -35,16 +32,5 @@
   <run_depend>tf_conversions</run_depend>
   <run_depend>angles</run_depend>
   <run_depend>visualization_msgs</run_depend>
-
-  <!-- Dependencies needed only for running tests. -->
-  <!-- <test_depend>puppeteer_msgs</test_depend> -->
-  <!-- <test_depend>std_msgs</test_depend> -->
-  <!-- <test_depend>rospy</test_depend> -->
-  <!-- <test_depend>roscpp</test_depend> -->
-  <!-- <test_depend>nav_msgs</test_depend> -->
-  <!-- <test_depend>tf</test_depend> -->
-  <!-- <test_depend>tf_conversions</test_depend> -->
-  <!-- <test_depend>angles</test_depend> -->
-  <!-- <test_depend>visualization_msgs</test_depend> -->
 
 </package>
