@@ -223,11 +223,11 @@ class MassSimulator:
                                             OperatingCondition, self.opcb)
 
         ## define a publisher for the position of the mass:
-        self.mass_pub = rospy.Publisher("mass_location", PointStamped)
+        self.mass_pub = rospy.Publisher("mass_location", PointStamped, queue_size=3)
 
         ## define a publisher for publishing the 2D results of the
         ## simulation
-        self.plan_pub = rospy.Publisher("meas_config", PlanarSystemConfig)
+        self.plan_pub = rospy.Publisher("meas_config", PlanarSystemConfig, queue_size=3)
 
         ## get noise value:
         if rospy.has_param("/simulator_noise"):

@@ -11,7 +11,7 @@
   <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
   <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher"/>
   <node pkg="tf" type="static_transform_publisher" name="model_connector"
-	args="0 0 0 0 0 0 1 $(arg frame) base_link 100" />
+	args="0 0 0 0 0 0 1 $(arg frame) robot_1/base_link 100" />
   <node pkg="robot_simulator" type="robot_simulator" name="simulator"
 	output="screen" respawn="true" />
   <node pkg="topic_tools" type="relay" name="$(arg rn)_relay" 
