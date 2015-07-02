@@ -152,7 +152,7 @@ class MassSystem3D:
                 'r' : self.q0[5],
                 }
         self.sys.satisfy_constraints()
-        self.mvi.initialize_from_configs(0,self.q0,DT,self.q0)
+        self.mvi.initialize_from_configs(0, self.sys.q, DT, self.sys.q)
 
         return
 
@@ -215,6 +215,8 @@ class MassSimulator:
         ## set base time
         self.last_time = rospy.rostime.get_rostime()
         self.len = h0
+        # create a counter variable for properly restarting simulation
+        self.counter = 1
 
         ## define a subscriber and callback for the robot_simulator
         self.sub = rospy.Subscriber("robot_state_noise_free", FullRobotState,
@@ -290,22 +292,16 @@ class MassSimulator:
 
         ## if we have not initialized the VI, let's do it, otherwise,
         ## let's integrate
-        
-        # # get operating_condition:
-        # if rospy.has_param("/operating_condition"):
-        #     operating = rospy.get_param("/operating_condition")
-        # else:
-        #     return
+
         operating = self.operating_condition
         # set string length
         self.len = data.left;
 
-        # if not self.initialized_flag and \
-        #     (operating is OperatingCondition.CALIBRATE or \
-        #      operating is OperatingCondition.RUN):
         if operating is OperatingCondition.IDLE:
+            self.counter = 1
             self.initialized_flag = False
             return
+
         elif not self.initialized_flag:
             q = [
                 ptrans.point.x,
@@ -314,12 +310,38 @@ class MassSimulator:
                 ptrans.point.x,
                 ptrans.point.z,
                 h0 ]
-            # print "initializing VI, q = ",q
             self.sys.reset_integration(state=q)
             self.last_time = ptrans.header.stamp
-            self.initialized_flag = True
+
+            # Sherif: This block of code runs one additional interation of the
+            # ROS publish-subscribe cycle (involving the 'robot_simulator' and
+            # 'planar_cl_controller' nodes), in order to correctly reset the
+            # configuration variables and respawn the simulation. It is similar
+            # to the code found below for the "running mode")
+            if self.counter:
+                self.counter -= 1
+                rho = [ptrans.point.x, ptrans.point.z, self.len]
+                dt = (ptrans.header.stamp - self.last_time).to_sec()
+                self.last_time = ptrans.header.stamp
+
+                ## now we can get the state of the system
+                q = self.sys.get_current_configuration()
+                ## we can also publish the planar results:
+                config = PlanarSystemConfig()
+                config.header.frame_id = "/optimization_frame"
+                config.header.stamp = rospy.get_rostime()
+                config.xm = q[0]
+                config.ym = q[1]
+                config.xr = rho[0]
+                config.r = rho[2]
+
+                self.plan_pub.publish(config)
+
+            else:
+                self.initialized_flag = True
             return
-        else:
+
+        elif self.initialized_flag:
             self.initialized_flag = True
             # if we are in the "running mode", let's integrate the VI,
             # and publish the results:
@@ -351,6 +373,7 @@ class MassSimulator:
             config.ym = q[1]
             config.xr = rho[0]
             config.r = rho[2]
+
             self.plan_pub.publish(config)
 
             ## now we can send out the transform
