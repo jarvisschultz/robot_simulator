@@ -29,7 +29,6 @@ PARAMETERS:
 """
 
 # ROS imports
-import roslib; roslib.load_manifest('robot_simulator')
 import rospy
 import tf
 from nav_msgs.msg import Odometry
@@ -214,9 +213,9 @@ class MassSimulator:
         self.initialized_flag = False
         ## set base time
         self.last_time = rospy.rostime.get_rostime()
-        self.len = h0
-        # create a counter variable for properly restarting simulation
-        self.counter = 1
+        self.length = h0
+        # create a flag for properly restarting simulation
+        self.restart_delay_flag = True
 
         ## define a subscriber and callback for the robot_simulator
         self.sub = rospy.Subscriber("robot_state_noise_free", FullRobotState,
@@ -295,10 +294,10 @@ class MassSimulator:
 
         operating = self.operating_condition
         # set string length
-        self.len = data.left;
+        self.length = data.left;
 
         if operating is OperatingCondition.IDLE:
-            self.counter = 1
+            self.restart_delay_flag = True
             self.initialized_flag = False
             return
 
@@ -318,9 +317,9 @@ class MassSimulator:
             # 'planar_cl_controller' nodes), in order to correctly reset the
             # configuration variables and respawn the simulation. It is similar
             # to the code found below for the "running mode")
-            if self.counter:
-                self.counter -= 1
-                rho = [ptrans.point.x, ptrans.point.z, self.len]
+            if self.restart_delay_flag:
+                self.restart_delay_flag = False
+                rho = [ptrans.point.x, ptrans.point.z, self.length]
                 dt = (ptrans.header.stamp - self.last_time).to_sec()
                 self.last_time = ptrans.header.stamp
 
@@ -345,7 +344,7 @@ class MassSimulator:
             self.initialized_flag = True
             # if we are in the "running mode", let's integrate the VI,
             # and publish the results:
-            rho = [ptrans.point.x, ptrans.point.z, self.len]
+            rho = [ptrans.point.x, ptrans.point.z, self.length]
             dt = (ptrans.header.stamp - self.last_time).to_sec()
             self.last_time = ptrans.header.stamp
             rospy.logdebug("Taking a step! dt = "+str(dt))
