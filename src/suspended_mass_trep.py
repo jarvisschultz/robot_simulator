@@ -268,7 +268,7 @@ class MassSimulator:
         Rbm = quat_to_rot(qbm)
         gbm = to_se3(Rbm,pbm)
         gmb = np.linalg.inv(gbm)
-        vm = np.dot(gmb,np.dot(gbs,np.dot(gsb,vb)))
+        vm = np.dot(gmb,vb)
         vm = np.ravel(vm)[0:3]
 
         ## so the first thing that we need to do is get the location
