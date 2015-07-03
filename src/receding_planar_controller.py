@@ -34,7 +34,6 @@ NOTES:
 """
 
 ## define all imports:
-import roslib; roslib.load_manifest('robot_simulator')
 import rospy
 import tf
 from std_msgs.msg import Time
